@@ -163,4 +163,30 @@ node_modules/
 
 # Temporary files
 tmp/
-temp/ 
+temp/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+terraform.tfvars
+terraform.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+.terraform/
+.terraform.lock.hcl
+
+# Cloud deployment
+gcp-key.json
+service-account.json
+
+# Environment-specific files
+.env.staging
+.env.production 
