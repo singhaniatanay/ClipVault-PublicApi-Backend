@@ -1,6 +1,6 @@
 # ClipVault Public API
 
-FastAPI-based public API for ClipVault MVP - providing link ingestion, search, and collections functionality with cloud deployment on Google Cloud Run.
+FastAPI-based public API for ClipVault MVP - providing link ingestion, search, and collections functionality with automatic cloud deployment on Google Cloud Run.
 
 ## Features
 
@@ -10,22 +10,21 @@ FastAPI-based public API for ClipVault MVP - providing link ingestion, search, a
 - **Authentication**: Supabase-based OAuth with JWT tokens
 - **Real-time Processing**: Event-driven architecture with Cloud Pub/Sub
 - **Cloud Native**: Deployed on Google Cloud Run with auto-scaling (0-20 instances)
-- **Infrastructure as Code**: Terraform-managed infrastructure
-- **CI/CD Pipeline**: Automated testing, building, and deployment via GitHub Actions
+- **Automatic Deployment**: Google Cloud Build automatically deploys on repository pushes
 
 ## Architecture
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   GitHub        │    │   Cloud Run      │    │   Supabase      │
-│   (CI/CD)       │───▶│   (FastAPI)      │───▶│   (Database)    │
+│   (Repository)  │───▶│   (FastAPI)      │───▶│   (Database)    │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │   Pub/Sub        │
-                       │   (Events)       │
-                       └──────────────────┘
+        │                        │
+        ▼                        ▼
+┌─────────────────┐    ┌──────────────────┐
+│  Cloud Build    │    │   Pub/Sub        │
+│  (Auto Deploy)  │    │   (Events)       │
+└─────────────────┘    └──────────────────┘
 ```
 
 ## Quick Start
@@ -35,8 +34,7 @@ FastAPI-based public API for ClipVault MVP - providing link ingestion, search, a
 - **Python 3.12+**
 - **Poetry** (for dependency management)
 - **Docker & Docker Compose** (for local development)
-- **Google Cloud SDK** (for cloud deployment)
-- **Terraform 1.6+** (for infrastructure management)
+- **Google Cloud Project** (for deployment)
 
 ### Local Development
 
@@ -90,87 +88,63 @@ poetry run mypy .
 
 ## Cloud Deployment
 
-### Prerequisites for Deployment
+### Automatic Deployment Setup
+
+The repository is configured for **automatic deployment** to Google Cloud Run using Google Cloud Build.
+
+#### Prerequisites
 
 1. **Google Cloud Project** with billing enabled
 2. **Required APIs enabled**:
-   - Cloud Run API
-   - Secret Manager API
-   - Pub/Sub API
-   - Cloud Build API
-   - Artifact Registry API
-
-3. **Required secrets** (for GitHub Actions):
-   - `GCP_PROJECT_ID`: Your Google Cloud project ID
-   - `WIF_PROVIDER`: Workload Identity Federation provider
-   - `WIF_SERVICE_ACCOUNT`: Service account for deployment
-   - `SUPABASE_URL`: Your Supabase project URL
-   - `SUPABASE_ANON_KEY`: Supabase anonymous key
-   - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key
-   - `REDIS_URL`: Redis connection URL (optional)
-
-### Manual Deployment
-
-1. **Configure Terraform variables**:
    ```bash
-   cd infra
-   cp terraform.tfvars.example terraform.tfvars
-   # Edit terraform.tfvars with your values
+   gcloud services enable cloudbuild.googleapis.com
+   gcloud services enable run.googleapis.com
+   gcloud services enable secretmanager.googleapis.com
    ```
 
-2. **Deploy using the script**:
+3. **Create a service account** for Cloud Run:
    ```bash
-   ./scripts/deploy.sh staging your-gcp-project-id
+   gcloud iam service-accounts create clipvault-api-staging \
+     --display-name="ClipVault API Staging"
    ```
 
-3. **Or deploy manually**:
-   ```bash
-   # Build and push container
-   docker build -f docker/Dockerfile -t gcr.io/your-project/clipvault-api .
-   docker push gcr.io/your-project/clipvault-api
-   
-   # Deploy infrastructure
-   cd infra
-   terraform init
-   terraform plan
-   terraform apply
-   ```
+4. **Set up Cloud Build trigger**:
+   - Go to [Cloud Build Triggers](https://console.cloud.google.com/cloud-build/triggers)
+   - Connect your GitHub repository
+   - Create trigger for `main` branch pushes
+   - Point to `cloudbuild.yaml` file
 
-### Automated Deployment (CI/CD)
+#### Deployment Process
 
-The project includes a complete CI/CD pipeline via GitHub Actions:
+1. **Push to main branch** - triggers automatic deployment
+2. **Cloud Build** builds Docker image from `docker/Dockerfile`
+3. **Image pushed** to Google Container Registry
+4. **Cloud Run service** automatically updated with new image
 
-**On Pull Requests**:
-- ✅ Run tests and linting
-- ✅ Type checking with MyPy
-- ✅ Security scanning with Trivy
-- ✅ Code coverage reporting
+### Manual Docker Build
 
-**On Main Branch Push**:
-- ✅ All PR checks
-- ✅ Build Docker image
-- ✅ Push to Artifact Registry
-- ✅ Deploy to Cloud Run via Terraform
-- ✅ Health check verification
-- ✅ Deployment notification
+To test the production Docker image locally:
 
-### Infrastructure
+```bash
+# Build the production image
+docker build -f docker/Dockerfile -t clipvault-api .
 
-The Terraform configuration creates:
+# Run the container
+docker run -p 8000:8000 clipvault-api
 
-- **Cloud Run service** with auto-scaling (0-20 instances)
-- **Service Account** with minimal required permissions
-- **Secret Manager secrets** for sensitive configuration
-- **Pub/Sub topic** for event publishing
-- **Artifact Registry repository** for container images
-- **IAM policies** for secure access
+# Test the deployment
+curl http://localhost:8000/ping
+```
 
-### Monitoring and Observability
+### Cloud Run Configuration
 
-- **Health checks**: `/ping` endpoint for service health
-- **Structured logging**: JSON-formatted logs with correlation IDs
-- **Cloud Run metrics**: Built-in CPU, memory, and request metrics
-- **Error tracking**: Automatic error reporting to Cloud Logging
+The service is configured with:
+- **Auto-scaling**: 0-20 instances
+- **Memory**: 512Mi per instance  
+- **CPU**: 1 vCPU per instance
+- **Port**: 8000
+- **Health checks**: `/ping` endpoint
+- **Public access**: Unauthenticated requests allowed
 
 ## API Endpoints
 
@@ -209,19 +183,52 @@ The Terraform configuration creates:
 
 ### Secret Management
 
-Sensitive configuration is stored in Google Cloud Secret Manager:
-- Database credentials
-- API keys
-- Service account keys
+For sensitive environment variables, use Google Cloud Secret Manager:
+
+```bash
+# Create secrets
+gcloud secrets create supabase-url --data-file=-
+gcloud secrets create supabase-anon-key --data-file=-
+gcloud secrets create supabase-service-role-key --data-file=-
+
+# Grant access to Cloud Run service account
+gcloud secrets add-iam-policy-binding supabase-url \
+  --member="serviceAccount:clipvault-api-staging@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+## Project Structure
+
+```
+ClipVault-PublicAPI/
+├── api/                    # Main application package
+│   ├── __init__.py
+│   ├── main.py            # FastAPI application
+│   └── (routes, services, etc. - coming soon)
+├── tests/                 # Test suite
+├── docker/                # Docker configuration
+│   ├── Dockerfile         # Production container
+│   └── Dockerfile.dev     # Development container
+├── cloudbuild.yaml        # Google Cloud Build configuration
+├── docker-compose.yml     # Development environment
+├── pyproject.toml         # Poetry configuration
+└── README.md             # This file
+```
 
 ## Development Workflow
 
 1. **Create feature branch**: `git checkout -b feature/my-feature`
 2. **Make changes and test locally**
 3. **Run tests**: `poetry run pytest`
-4. **Create pull request**: Triggers CI pipeline
-5. **Merge to main**: Triggers deployment to staging
-6. **Promote to production**: Manual Terraform deployment
+4. **Create pull request**: Review changes
+5. **Merge to main**: Triggers automatic deployment to staging
+
+## Monitoring
+
+- **Cloud Run Logs**: Available in Google Cloud Console
+- **Health Check**: `/ping` endpoint returns `{"pong": true}`
+- **API Documentation**: Available at `/docs` when service is running
+- **Metrics**: Built-in Cloud Run metrics for requests, latency, errors
 
 ## Contributing
 
@@ -235,10 +242,9 @@ Sensitive configuration is stored in Google Cloud Secret Manager:
 ## Security
 
 - **Non-root container**: App runs as non-root user
-- **Minimal permissions**: Service account with least-privilege access
-- **Secret management**: All sensitive data in Secret Manager
-- **Network security**: Cloud Run with VPC connector (optional)
-- **Dependency scanning**: Automated vulnerability scanning
+- **Minimal attack surface**: Multi-stage Docker build
+- **Dependency scanning**: Keep dependencies updated
+- **HTTPS**: Cloud Run provides automatic TLS termination
 
 ## Support
 
