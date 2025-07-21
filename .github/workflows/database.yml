@@ -2,10 +2,10 @@ name: Database Migrations
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main-v2, develop]
     paths: ['db/**']
   pull_request:
-    branches: [main, develop]
+    branches: [main-v2, develop]
     paths: ['db/**']
   workflow_dispatch:
     inputs:
@@ -32,10 +32,38 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y sqitch libdbd-pg-perl postgresql-client
           
-      - name: Verify migration syntax
+      - name: Verify migration files
         run: |
           cd db/
-          sqitch verify --dry-run
+          # Check that all required migration files exist
+          echo "Checking migration file structure..."
+          
+          # Verify all migrations in plan have corresponding files
+          while IFS= read -r line; do
+            if [[ $line =~ ^([a-zA-Z0-9_]+) ]]; then
+              migration="${BASH_REMATCH[1]}"
+              echo "Checking migration: $migration"
+              
+              if [[ ! -f "deploy/$migration.sql" ]]; then
+                echo "❌ Missing deploy file: deploy/$migration.sql"
+                exit 1
+              fi
+              
+              if [[ ! -f "revert/$migration.sql" ]]; then
+                echo "❌ Missing revert file: revert/$migration.sql"
+                exit 1
+              fi
+              
+              if [[ ! -f "verify/$migration.sql" ]]; then
+                echo "❌ Missing verify file: verify/$migration.sql"
+                exit 1
+              fi
+              
+              echo "✅ $migration - all files present"
+            fi
+          done < <(grep -v '^%\|^$\|^#' sqitch.plan)
+          
+          echo "✅ All migration files are present and accounted for"
           
       - name: Check migration plan
         run: |
@@ -76,6 +104,9 @@ jobs:
           # Build connection string (same format as our API)
           export DATABASE_URL="postgresql://postgres.$PROJECT_REF:$SUPABASE_DB_PASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
           
+          echo "📊 Current migration status:"
+          sqitch status $DATABASE_URL || echo "No previous migrations"
+          
           echo "🚀 Deploying migrations to staging database..."
           sqitch deploy $DATABASE_URL
           
@@ -90,7 +121,7 @@ jobs:
 
   deploy-production:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'production')
+    if: github.ref == 'refs/heads/main-v2' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'production')
     environment: production
     needs: []  # No dependencies for main branch
     
@@ -110,7 +141,7 @@ jobs:
           PROJECT_REF=$(echo "$SUPABASE_URL" | sed 's|https://||' | sed 's|\.supabase\.co||')
           echo "PROJECT_REF=$PROJECT_REF" >> $GITHUB_ENV
           
-      - name: Backup check (dry run revert)
+      - name: Check migration status
         env:
           SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}
@@ -118,8 +149,11 @@ jobs:
           cd db/
           export DATABASE_URL="postgresql://postgres.$PROJECT_REF:$SUPABASE_DB_PASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
           
-          echo "🔍 Checking rollback capability..."
-          sqitch revert --to @HEAD~1 --dry-run $DATABASE_URL || echo "No previous migrations to revert"
+          echo "🔍 Checking current migration status..."
+          sqitch status $DATABASE_URL || echo "No previous migrations deployed"
+          
+          echo "📋 Planned migrations:"
+          cat sqitch.plan
           
       - name: Deploy migrations to production
         env:

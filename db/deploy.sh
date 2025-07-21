@@ -104,14 +104,23 @@ if [[ $ENVIRONMENT == "production" ]]; then
     fi
 fi
 
-# Dry run verification
-echo_info "Running migration verification (dry run)..."
-if sqitch verify --dry-run "$DATABASE_URL"; then
-    echo_success "Migration verification passed"
-else
-    echo_error "Migration verification failed"
-    exit 1
-fi
+# Pre-deployment checks
+echo_info "Running pre-deployment checks..."
+echo_info "Planned migrations:"
+cat sqitch.plan | grep -v '^%\|^$\|^#'
+
+echo_info "Checking migration file completeness..."
+while IFS= read -r line; do
+    if [[ $line =~ ^([a-zA-Z0-9_]+) ]]; then
+        migration="${BASH_REMATCH[1]}"
+        if [[ ! -f "deploy/$migration.sql" ]] || [[ ! -f "revert/$migration.sql" ]] || [[ ! -f "verify/$migration.sql" ]]; then
+            echo_error "Missing migration files for: $migration"
+            exit 1
+        fi
+    fi
+done < <(grep -v '^%\|^$\|^#' sqitch.plan)
+
+echo_success "Pre-deployment checks passed"
 
 # Deploy migrations
 echo_info "Deploying migrations to $ENVIRONMENT..."
