@@ -9,6 +9,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Enable pgcrypto for additional crypto functions
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+-- Enable pg_trgm for trigram text similarity and GIN indexing
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+
 -- Clips table: Canonical record per link
 CREATE TABLE clips (
     clip_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

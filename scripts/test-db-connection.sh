@@ -73,7 +73,7 @@ else
 fi
 
 # Build connection string
-DATABASE_URL="postgresql://postgres.$PROJECT_REF:$SUPABASE_DB_PASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
+DATABASE_URL="postgresql://postgres.${PROJECT_REF}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
 echo_success "Connection string built successfully"
 echo_info "Connection details: postgres.$PROJECT_REF@aws-0-us-east-2.pooler.supabase.com:6543"
 

@@ -21,5 +21,9 @@ DROP TABLE IF EXISTS user_clips;
 DROP TABLE IF EXISTS clips;
 
 -- Note: We don't drop extensions as they might be used by other schemas
+-- If you need to drop extensions manually:
+-- DROP EXTENSION IF EXISTS "pg_trgm";
+-- DROP EXTENSION IF EXISTS "pgcrypto";
+-- DROP EXTENSION IF EXISTS "uuid-ossp";
 
 COMMIT; 

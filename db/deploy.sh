@@ -64,7 +64,7 @@ case $ENVIRONMENT in
             exit 1
         fi
         PROJECT_REF=$(echo "$SUPABASE_URL" | sed 's|https://||' | sed 's|\.supabase\.co||')
-        DATABASE_URL="postgresql://postgres.$PROJECT_REF:$SUPABASE_DB_PASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
+        DATABASE_URL="postgresql://postgres.${PROJECT_REF}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
         ;;
     production)
         if [[ -z "${PRODUCTION_SUPABASE_URL:-}" ]] || [[ -z "${PRODUCTION_SUPABASE_DB_PASSWORD:-}" ]]; then
@@ -73,7 +73,7 @@ case $ENVIRONMENT in
             exit 1
         fi
         PROJECT_REF=$(echo "$PRODUCTION_SUPABASE_URL" | sed 's|https://||' | sed 's|\.supabase\.co||')
-        DATABASE_URL="postgresql://postgres.$PROJECT_REF:$PRODUCTION_SUPABASE_DB_PASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
+        DATABASE_URL="postgresql://postgres.${PROJECT_REF}:${PRODUCTION_SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
         ;;
     *)
         echo_error "Invalid environment: $ENVIRONMENT"

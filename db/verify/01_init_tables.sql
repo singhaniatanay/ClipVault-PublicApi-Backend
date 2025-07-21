@@ -5,6 +5,7 @@ BEGIN;
 -- Verify extensions exist
 SELECT 1/COUNT(*) FROM pg_extension WHERE extname = 'uuid-ossp';
 SELECT 1/COUNT(*) FROM pg_extension WHERE extname = 'pgcrypto';
+SELECT 1/COUNT(*) FROM pg_extension WHERE extname = 'pg_trgm';
 
 -- Verify all tables exist
 SELECT 1/COUNT(*) FROM information_schema.tables WHERE table_name = 'clips';

@@ -60,7 +60,7 @@ The ClipVault database schema includes:
    PROJECT_REF=$(echo "$SUPABASE_URL" | sed 's|https://||' | sed 's|\.supabase\.co||')
    
    # Build connection string
-   export DATABASE_URL="postgresql://postgres.$PROJECT_REF:$SUPABASE_DB_PASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
+   export DATABASE_URL="postgresql://postgres.${PROJECT_REF}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
    
    # Deploy all migrations
    sqitch deploy $DATABASE_URL
