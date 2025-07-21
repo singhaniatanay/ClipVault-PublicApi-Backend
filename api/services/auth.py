@@ -3,7 +3,7 @@
 import os
 import json
 from typing import Optional, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import httpx
 import structlog
 from fastapi import HTTPException, Depends, status
@@ -66,9 +66,7 @@ class AuthService:
             jwks_data = response.json()
             self.jwks_cache = jwks_data
             # Cache for 1 hour
-            self.jwks_cache_expiry = datetime.now(timezone.utc).replace(
-                hour=datetime.now(timezone.utc).hour + 1
-            )
+            self.jwks_cache_expiry = datetime.now(timezone.utc) + timedelta(hours=1)
             
             logger.info("JWKS fetched and cached successfully")
             return jwks_data
@@ -145,6 +143,88 @@ class AuthService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Authentication error"
+            )
+
+    async def exchange_oauth_code(
+        self, 
+        provider: str, 
+        code: str, 
+        code_verifier: Optional[str] = None,
+        redirect_uri: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Exchange OAuth authorization code for Supabase session.
+        
+        Args:
+            provider: OAuth provider (google, github, etc.)
+            code: Authorization code from OAuth provider
+            code_verifier: PKCE code verifier (for PKCE flow)
+            redirect_uri: Redirect URI used in OAuth flow
+            
+        Returns:
+            Dict containing access_token, refresh_token, user, etc.
+            
+        Raises:
+            HTTPException: If token exchange fails
+        """
+        try:
+            client = await self.get_http_client()
+            token_url = f"{self.supabase_url}/auth/v1/token"
+            
+            # Prepare request data for PKCE flow
+            data = {
+                "grant_type": "authorization_code",
+                "code": code,
+            }
+            
+            # Add optional parameters
+            if code_verifier:
+                data["code_verifier"] = code_verifier
+            if redirect_uri:
+                data["redirect_uri"] = redirect_uri
+                
+            headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "apikey": self.supabase_anon_key,
+                "Authorization": f"Bearer {self.supabase_anon_key}"
+            }
+            
+            logger.info(
+                "Exchanging OAuth code for token", 
+                provider=provider,
+                has_code_verifier=bool(code_verifier),
+                has_redirect_uri=bool(redirect_uri)
+            )
+            
+            response = await client.post(
+                token_url,
+                data=data,
+                headers=headers
+            )
+            
+            if response.status_code != 200:
+                error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {"error": "unknown", "message": response.text}
+                logger.error(
+                    "OAuth token exchange failed",
+                    status_code=response.status_code,
+                    error=error_data
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"OAuth token exchange failed: {error_data.get('message', 'Invalid authorization code')}"
+                )
+                
+            token_data = response.json()
+            logger.info("OAuth token exchange successful", user_id=token_data.get("user", {}).get("id"))
+            
+            return token_data
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Unexpected error during OAuth token exchange", error=str(e))
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="OAuth token exchange failed"
             )
 
 # Global auth service instance - lazy initialization

@@ -6,7 +6,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
-from api.services.auth import get_current_user, get_user_id, get_user_email
+from api.services.auth import get_current_user, get_user_id, get_user_email, get_auth_service
 from api.schemas.auth import (
     MeResponse, 
     UserProfile, 
@@ -36,25 +36,82 @@ async def exchange_token(request: TokenExchangeRequest) -> TokenResponse:
     
     This endpoint handles the OAuth callback by exchanging the authorization code
     for a Supabase session token. Currently supports Google OAuth.
-    
-    **Note**: This is a placeholder implementation. Full OAuth integration 
-    will be implemented when frontend integration begins.
     """
-    # TODO: Implement actual Supabase OAuth token exchange
-    # For now, return a placeholder response to satisfy the LLD
-    
-    logger.info(
-        "Token exchange requested", 
-        provider=request.provider,
-        has_code=bool(request.code),
-        has_code_verifier=bool(request.code_verifier)
-    )
-    
-    # Placeholder implementation - will be replaced with actual Supabase integration
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="OAuth token exchange not yet implemented. Use direct JWT for testing."
-    )
+    try:
+        logger.info(
+            "Token exchange requested", 
+            provider=request.provider,
+            has_code=bool(request.code),
+            has_code_verifier=bool(request.code_verifier)
+        )
+        
+        # Validate provider (currently only support Google)
+        if request.provider != "google":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported provider: {request.provider}. Currently only 'google' is supported."
+            )
+        
+        # Get auth service
+        auth_service = get_auth_service()
+        
+        # Exchange OAuth code for Supabase session
+        token_data = await auth_service.exchange_oauth_code(
+            provider=request.provider,
+            code=request.code,
+            code_verifier=request.code_verifier,
+            redirect_uri=request.redirect_uri
+        )
+        
+        # Extract user information from Supabase response
+        supabase_user = token_data.get("user", {})
+        user_metadata = supabase_user.get("user_metadata", {})
+        
+        # Build UserProfile from Supabase user data
+        user_profile = UserProfile(
+            id=supabase_user.get("id"),
+            email=supabase_user.get("email"),
+            email_verified=supabase_user.get("email_verified", False),
+            phone=supabase_user.get("phone"),
+            created_at=supabase_user.get("created_at"),
+            updated_at=supabase_user.get("updated_at"),
+            last_sign_in_at=supabase_user.get("last_sign_in_at"),
+            display_name=user_metadata.get("full_name") or user_metadata.get("name"),
+            avatar_url=user_metadata.get("avatar_url") or user_metadata.get("picture"),
+            preferences=user_metadata.get("preferences", {})
+        )
+        
+        # Build TokenResponse
+        response = TokenResponse(
+            jwt=token_data.get("access_token"),
+            refresh_token=token_data.get("refresh_token"),
+            user=user_profile,
+            expires_in=token_data.get("expires_in", 3600),  # Default to 1 hour
+            token_type=token_data.get("token_type", "Bearer")
+        )
+        
+        logger.info(
+            "OAuth token exchange successful", 
+            provider=request.provider,
+            user_id=user_profile.id,
+            user_email=user_profile.email
+        )
+        
+        return response
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (from auth service)
+        raise
+    except Exception as e:
+        logger.error(
+            "Unexpected error during token exchange",
+            provider=request.provider,
+            error=str(e)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token exchange failed due to internal error"
+        )
 
 
 @router.get(

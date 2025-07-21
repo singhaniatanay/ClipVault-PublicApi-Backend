@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipVault OAuth Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            line-height: 1.6;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .config {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 2rem;
+            border-left: 4px solid #007bff;
+        }
+        .config h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        input, select {
+            width: 100%;
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 0.5rem 0.5rem 0.5rem 0;
+        }
+        button:hover {
+            background: #3367d6;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 2rem;
+            padding: 1rem;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .step {
+            margin: 1rem 0;
+            padding: 1rem;
+            border-left: 3px solid #28a745;
+            background: #f8f9fa;
+        }
+        .step h4 {
+            margin-top: 0;
+            color: #28a745;
+        }
+        .hidden {
+            display: none;
+        }
+        .user-info {
+            background: #e7f3ff;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+        }
+        .token-display {
+            background: #fff3cd;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+            border: 1px solid #ffeaa7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Supabase OAuth + API Server Test</h1>
+        
+        <div class="info" style="background: #e3f2fd; padding: 1rem; border-radius: 4px; margin-bottom: 2rem; border-left: 4px solid #2196f3;">
+            <h4 style="margin-top: 0; color: #1976d2;">How this works:</h4>
+            <ol style="margin-bottom: 0;">
+                <li><strong>Supabase OAuth:</strong> Handle Google authentication via Supabase</li>
+                <li><strong>Extract JWT:</strong> Get the access token from the Supabase session</li>
+                <li><strong>Test API:</strong> Call your localhost API endpoints with the JWT</li>
+            </ol>
+        </div>
+        
+        <div class="config">
+            <h3>⚙️ Configuration</h3>
+            <label for="supabaseUrl">Supabase URL:</label>
+            <input type="text" id="supabaseUrl" placeholder="https://your-project.supabase.co">
+            
+            <label for="supabaseAnonKey">Supabase Anon Key:</label>
+            <input type="text" id="supabaseAnonKey" placeholder="your-anon-key">
+            
+            <label for="apiBaseUrl">API Base URL:</label>
+            <select id="apiBaseUrl">
+                <option value="http://localhost:8000">Local Development (localhost:8000)</option>
+                <option value="https://your-api.cloudrun.app">Production (CloudRun)</option>
+                <option value="custom">Custom URL</option>
+            </select>
+            
+            <input type="text" id="customApiUrl" placeholder="https://your-custom-api-url.com" class="hidden">
+            
+            <label for="redirectUri">Redirect URI (after OAuth):</label>
+            <input type="text" id="redirectUri" value="" placeholder="Current page URL (auto-filled)">
+        </div>
+
+        <div class="step">
+            <h4>Step 1: Initialize OAuth Flow</h4>
+            <button onclick="startOAuth()" id="startBtn">🚀 Sign in with Google</button>
+            <button onclick="clearResults()">🗑️ Clear Results</button>
+        </div>
+
+        <div class="step">
+            <h4>Step 2: Test Supabase Auth Methods</h4>
+            <button onclick="getUser()" id="getUserBtn" disabled>👤 Get Current User</button>
+            <button onclick="getSession()" id="getSessionBtn" disabled>🔐 Get Session</button>
+            <button onclick="signOut()" id="signOutBtn" disabled>🚪 Sign Out</button>
+        </div>
+
+        <div class="step">
+            <h4>Step 3: Test Your API Server</h4>
+            <button onclick="testTokenExchange()" id="testTokenBtn" disabled>🔄 Test /auth/token</button>
+            <button onclick="testMeEndpoint()" id="testMeBtn" disabled>🧪 Test /auth/me</button>
+            <button onclick="testVerifyEndpoint()" id="testVerifyBtn" disabled>✅ Test /auth/verify</button>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <!-- Include Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script>
+        // Global variables
+        let supabase = null;
+        let currentUser = null;
+        let currentSession = null;
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Auto-fill redirect URI with current page URL
+            document.getElementById('redirectUri').value = window.location.href;
+            
+            // Handle API URL selection
+            document.getElementById('apiBaseUrl').addEventListener('change', function() {
+                const customInput = document.getElementById('customApiUrl');
+                if (this.value === 'custom') {
+                    customInput.classList.remove('hidden');
+                } else {
+                    customInput.classList.add('hidden');
+                }
+            });
+            
+            // Try to restore previous Supabase connection
+            const storedUrl = localStorage.getItem('supabase_url');
+            const storedKey = localStorage.getItem('supabase_anon_key');
+            const storedApiUrl = localStorage.getItem('api_base_url');
+            
+            if (storedUrl && storedKey) {
+                document.getElementById('supabaseUrl').value = storedUrl;
+                document.getElementById('supabaseAnonKey').value = storedKey;
+                initializeSupabase(storedUrl, storedKey);
+            }
+            
+            if (storedApiUrl) {
+                if (storedApiUrl === 'http://localhost:8000' || storedApiUrl.includes('cloudrun.app')) {
+                    document.getElementById('apiBaseUrl').value = storedApiUrl;
+                } else {
+                    document.getElementById('apiBaseUrl').value = 'custom';
+                    document.getElementById('customApiUrl').value = storedApiUrl;
+                    document.getElementById('customApiUrl').classList.remove('hidden');
+                }
+            }
+        });
+
+        function getApiBaseUrl() {
+            const select = document.getElementById('apiBaseUrl');
+            if (select.value === 'custom') {
+                return document.getElementById('customApiUrl').value;
+            }
+            return select.value;
+        }
+
+        function initializeSupabase(url, anonKey) {
+            try {
+                // Create Supabase client
+                supabase = window.supabase.createClient(url, anonKey);
+                
+                                 // Set up auth state listener
+                 supabase.auth.onAuthStateChange((event, session) => {
+                     showResult(`🔄 Auth state changed: ${event}`, 'info');
+                     
+                     if (session) {
+                         currentSession = session;
+                         currentUser = session.user;
+                         
+                         // Enable Supabase test buttons
+                         document.getElementById('getUserBtn').disabled = false;
+                         document.getElementById('getSessionBtn').disabled = false;
+                         document.getElementById('signOutBtn').disabled = false;
+                         
+                         // Enable API test buttons
+                         document.getElementById('testTokenBtn').disabled = false;
+                         document.getElementById('testMeBtn').disabled = false;
+                         document.getElementById('testVerifyBtn').disabled = false;
+                         
+                         showResult(`✅ User signed in: ${currentUser.email}`, 'success');
+                         showUserInfo(currentUser);
+                         showSessionInfo(session);
+                         
+                     } else {
+                         currentSession = null;
+                         currentUser = null;
+                         
+                         // Disable Supabase test buttons
+                         document.getElementById('getUserBtn').disabled = true;
+                         document.getElementById('getSessionBtn').disabled = true;
+                         document.getElementById('signOutBtn').disabled = true;
+                         
+                         // Disable API test buttons
+                         document.getElementById('testTokenBtn').disabled = true;
+                         document.getElementById('testMeBtn').disabled = true;
+                         document.getElementById('testVerifyBtn').disabled = true;
+                         
+                         showResult('🚪 User signed out', 'info');
+                     }
+                 });
+                
+                showResult('✅ Supabase client initialized successfully', 'success');
+                return true;
+                
+            } catch (error) {
+                showResult(`❌ Error initializing Supabase: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+                 async function startOAuth() {
+             const supabaseUrl = document.getElementById('supabaseUrl').value.trim();
+             const supabaseAnonKey = document.getElementById('supabaseAnonKey').value.trim();
+             const redirectUri = document.getElementById('redirectUri').value.trim();
+             const apiBaseUrl = getApiBaseUrl();
+
+             if (!supabaseUrl) {
+                 showResult('❌ Please enter your Supabase URL', 'error');
+                 return;
+             }
+
+             if (!supabaseAnonKey) {
+                 showResult('❌ Please enter your Supabase Anon Key', 'error');
+                 return;
+             }
+
+             if (!apiBaseUrl) {
+                 showResult('❌ Please select or enter API Base URL', 'error');
+                 return;
+             }
+
+             // Store credentials for future use
+             localStorage.setItem('supabase_url', supabaseUrl);
+             localStorage.setItem('supabase_anon_key', supabaseAnonKey);
+             localStorage.setItem('api_base_url', apiBaseUrl);
+
+             // Initialize Supabase if not already done
+             if (!supabase) {
+                 const success = initializeSupabase(supabaseUrl, supabaseAnonKey);
+                 if (!success) return;
+             }
+
+             try {
+                 showResult('🔄 Starting Google OAuth with Supabase...', 'info');
+
+                 const { data, error } = await supabase.auth.signInWithOAuth({
+                     provider: 'google',
+                     options: {
+                         redirectTo: redirectUri
+                     }
+                 });
+
+                 if (error) {
+                     showResult(`❌ OAuth error: ${error.message}`, 'error');
+                 } else {
+                     showResult('🔄 Redirecting to Google...', 'info');
+                     // The browser will redirect automatically
+                 }
+
+             } catch (error) {
+                 showResult(`❌ Error starting OAuth: ${error.message}`, 'error');
+             }
+         }
+
+        async function getUser() {
+            if (!supabase) {
+                showResult('❌ Supabase not initialized', 'error');
+                return;
+            }
+
+            try {
+                const { data: { user }, error } = await supabase.auth.getUser();
+
+                if (error) {
+                    showResult(`❌ Error getting user: ${error.message}`, 'error');
+                } else if (user) {
+                    showResult(`👤 Current User:
+
+${JSON.stringify(user, null, 2)}`, 'success');
+                } else {
+                    showResult('❌ No user logged in', 'error');
+                }
+
+            } catch (error) {
+                showResult(`❌ Error getting user: ${error.message}`, 'error');
+            }
+        }
+
+        async function getSession() {
+            if (!supabase) {
+                showResult('❌ Supabase not initialized', 'error');
+                return;
+            }
+
+            try {
+                const { data: { session }, error } = await supabase.auth.getSession();
+
+                if (error) {
+                    showResult(`❌ Error getting session: ${error.message}`, 'error');
+                } else if (session) {
+                    showResult(`🔐 Current Session:
+
+${JSON.stringify(session, null, 2)}`, 'success');
+                } else {
+                    showResult('❌ No active session', 'error');
+                }
+
+            } catch (error) {
+                showResult(`❌ Error getting session: ${error.message}`, 'error');
+            }
+        }
+
+                 async function signOut() {
+             if (!supabase) {
+                 showResult('❌ Supabase not initialized', 'error');
+                 return;
+             }
+
+             try {
+                 const { error } = await supabase.auth.signOut();
+
+                 if (error) {
+                     showResult(`❌ Error signing out: ${error.message}`, 'error');
+                 } else {
+                     showResult('✅ Signed out successfully', 'success');
+                 }
+
+             } catch (error) {
+                 showResult(`❌ Error signing out: ${error.message}`, 'error');
+             }
+         }
+
+         async function testTokenExchange() {
+             if (!currentSession) {
+                 showResult('❌ No active session. Please sign in first.', 'error');
+                 return;
+             }
+
+             const apiBaseUrl = getApiBaseUrl();
+             if (!apiBaseUrl) {
+                 showResult('❌ Please select or enter API Base URL', 'error');
+                 return;
+             }
+
+             try {
+                 showResult('🔄 Testing token exchange with your API...', 'info');
+
+                 // Simulate an OAuth code exchange by sending the Supabase session
+                 const response = await fetch(`${apiBaseUrl}/auth/token`, {
+                     method: 'POST',
+                     headers: {
+                         'Content-Type': 'application/json',
+                     },
+                     body: JSON.stringify({
+                         provider: 'google',
+                         // Send a fake code - your API should handle this gracefully
+                         code: 'supabase-session-test',
+                         // Include session info for debugging
+                         session_info: {
+                             access_token: currentSession.access_token,
+                             user_id: currentUser.id,
+                             email: currentUser.email
+                         }
+                     })
+                 });
+
+                 const result = await response.json();
+
+                 if (response.ok) {
+                     showResult(`✅ /auth/token SUCCESS (${response.status}):
+
+${JSON.stringify(result, null, 2)}`, 'success');
+                 } else {
+                     showResult(`⚠️ /auth/token response (${response.status}):
+
+${JSON.stringify(result, null, 2)}
+
+Note: This might fail since we're using a test code, but you can see how your API responds.`, 'error');
+                 }
+
+             } catch (error) {
+                 showResult(`❌ Error testing /auth/token: ${error.message}`, 'error');
+             }
+         }
+
+         async function testMeEndpoint() {
+             if (!currentSession) {
+                 showResult('❌ No active session. Please sign in first.', 'error');
+                 return;
+             }
+
+             const apiBaseUrl = getApiBaseUrl();
+             if (!apiBaseUrl) {
+                 showResult('❌ Please select or enter API Base URL', 'error');
+                 return;
+             }
+
+             try {
+                 showResult('🔄 Testing /auth/me with Supabase JWT...', 'info');
+
+                 const response = await fetch(`${apiBaseUrl}/auth/me`, {
+                     method: 'GET',
+                     headers: {
+                         'Authorization': `Bearer ${currentSession.access_token}`,
+                         'Content-Type': 'application/json'
+                     }
+                 });
+
+                 const result = await response.json();
+
+                 if (response.ok) {
+                     showResult(`✅ /auth/me SUCCESS (${response.status}):
+
+${JSON.stringify(result, null, 2)}`, 'success');
+                 } else {
+                     showResult(`❌ /auth/me failed (${response.status}):
+
+${JSON.stringify(result, null, 2)}`, 'error');
+                 }
+
+             } catch (error) {
+                 showResult(`❌ Error testing /auth/me: ${error.message}`, 'error');
+             }
+         }
+
+         async function testVerifyEndpoint() {
+             if (!currentSession) {
+                 showResult('❌ No active session. Please sign in first.', 'error');
+                 return;
+             }
+
+             const apiBaseUrl = getApiBaseUrl();
+             if (!apiBaseUrl) {
+                 showResult('❌ Please select or enter API Base URL', 'error');
+                 return;
+             }
+
+             try {
+                 showResult('🔄 Testing /auth/verify with Supabase JWT...', 'info');
+
+                 const response = await fetch(`${apiBaseUrl}/auth/verify`, {
+                     method: 'GET',
+                     headers: {
+                         'Authorization': `Bearer ${currentSession.access_token}`,
+                         'Content-Type': 'application/json'
+                     }
+                 });
+
+                 const result = await response.json();
+
+                 if (response.ok) {
+                     showResult(`✅ /auth/verify SUCCESS (${response.status}):
+
+${JSON.stringify(result, null, 2)}`, 'success');
+                 } else {
+                     showResult(`❌ /auth/verify failed (${response.status}):
+
+${JSON.stringify(result, null, 2)}`, 'error');
+                 }
+
+             } catch (error) {
+                 showResult(`❌ Error testing /auth/verify: ${error.message}`, 'error');
+             }
+         }
+
+        function showResult(message, type) {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${type}`;
+            resultDiv.textContent = message;
+            resultsDiv.appendChild(resultDiv);
+            
+            // Scroll to bottom
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function showUserInfo(user) {
+            const resultsDiv = document.getElementById('results');
+            const userDiv = document.createElement('div');
+            userDiv.className = 'user-info';
+            
+            // Get user metadata from the user object
+            const userMetadata = user.user_metadata || {};
+            
+            userDiv.innerHTML = `
+                <h4>👤 User Information</h4>
+                <p><strong>Email:</strong> ${user.email || 'N/A'}</p>
+                <p><strong>Name:</strong> ${userMetadata.full_name || userMetadata.name || 'N/A'}</p>
+                <p><strong>ID:</strong> ${user.id || 'N/A'}</p>
+                <p><strong>Email Verified:</strong> ${user.email_confirmed_at ? '✅' : '❌'}</p>
+                <p><strong>Provider:</strong> ${user.app_metadata?.provider || 'N/A'}</p>
+                ${userMetadata.avatar_url || userMetadata.picture ? 
+                    `<p><strong>Avatar:</strong> <img src="${userMetadata.avatar_url || userMetadata.picture}" width="50" height="50" style="border-radius: 50%; vertical-align: middle;"></p>` : 
+                    ''}
+            `;
+            resultsDiv.appendChild(userDiv);
+        }
+
+        function showSessionInfo(session) {
+            const resultsDiv = document.getElementById('results');
+            const sessionDiv = document.createElement('div');
+            sessionDiv.className = 'token-display';
+            sessionDiv.innerHTML = `
+                <h4>🔑 Session Information</h4>
+                <p><strong>Access Token (JWT):</strong> ${session.access_token.substring(0, 50)}...</p>
+                <p><strong>Refresh Token:</strong> ${session.refresh_token ? session.refresh_token.substring(0, 30) + '...' : 'N/A'}</p>
+                <p><strong>Token Type:</strong> ${session.token_type || 'bearer'}</p>
+                <p><strong>Expires At:</strong> ${new Date(session.expires_at * 1000).toLocaleString()}</p>
+                <p><strong>Provider Token:</strong> ${session.provider_token ? session.provider_token.substring(0, 30) + '...' : 'N/A'}</p>
+                <p><em>🔄 Session managed automatically by Supabase</em></p>
+            `;
+            resultsDiv.appendChild(sessionDiv);
+        }
+
+                 function clearResults() {
+             document.getElementById('results').innerHTML = '';
+             localStorage.removeItem('supabase_url');
+             localStorage.removeItem('supabase_anon_key');
+             localStorage.removeItem('api_base_url');
+             
+             if (supabase) {
+                 supabase.auth.signOut();
+             }
+             
+             supabase = null;
+             currentUser = null;
+             currentSession = null;
+             
+             // Disable Supabase buttons
+             document.getElementById('getUserBtn').disabled = true;
+             document.getElementById('getSessionBtn').disabled = true;
+             document.getElementById('signOutBtn').disabled = true;
+             
+             // Disable API buttons
+             document.getElementById('testTokenBtn').disabled = true;
+             document.getElementById('testMeBtn').disabled = true;
+             document.getElementById('testVerifyBtn').disabled = true;
+             
+             // Clear URL parameters
+             const url = new URL(window.location);
+             url.search = '';
+             window.history.replaceState({}, document.title, url);
+         }
+    </script>
+</body>
+</html> 
