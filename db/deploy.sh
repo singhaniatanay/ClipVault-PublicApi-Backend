@@ -84,6 +84,7 @@ esac
 
 echo_info "Deploying migrations to $ENVIRONMENT environment"
 echo_info "Project reference: $PROJECT_REF"
+echo_info "Database host: aws-0-us-east-2.pooler.supabase.com:6543"
 
 # Check current migration status
 echo_info "Checking current migration status..."

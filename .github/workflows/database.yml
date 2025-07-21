@@ -128,11 +128,13 @@ jobs:
           
           cd db/
           # Build connection string (same format as our API)
+          # Note: We don't echo this to avoid GitHub secret masking issues
           export DATABASE_URL="postgresql://postgres.$PROJECT_REF:$SUPABASE_DB_PASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
           
           echo "🔗 Connecting to database..."
           echo "📋 Project: $PROJECT_REF"
           echo "🌐 Host: aws-0-us-east-2.pooler.supabase.com:6543"
+          echo "🔒 Connection string built (password masked for security)"
           
           echo "📊 Current migration status:"
           sqitch status "$DATABASE_URL" || echo "No previous migrations"
@@ -202,9 +204,11 @@ jobs:
           fi
           
           cd db/
+          # Build connection string (avoid logging to prevent secret masking issues)
           export DATABASE_URL="postgresql://postgres.$PROJECT_REF:$SUPABASE_DB_PASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
           
           echo "🔍 Checking current migration status..."
+          echo "🔒 Using connection to $PROJECT_REF database..."
           sqitch status "$DATABASE_URL" || echo "No previous migrations deployed"
           
           echo "📋 Planned migrations:"
@@ -216,11 +220,13 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}
         run: |
           cd db/
+          # Build connection string (avoid logging to prevent secret masking issues)
           export DATABASE_URL="postgresql://postgres.$PROJECT_REF:$SUPABASE_DB_PASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
           
           echo "🔗 Connecting to production database..."
           echo "📋 Project: $PROJECT_REF"
           echo "🌐 Host: aws-0-us-east-2.pooler.supabase.com:6543"
+          echo "🔒 Production connection string built (password masked for security)"
           
           echo "🚀 Deploying migrations to production database..."
           sqitch deploy "$DATABASE_URL"
@@ -241,7 +247,9 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}
         run: |
           cd db/
+          # Build connection string for rollback
           export DATABASE_URL="postgresql://postgres.$PROJECT_REF:$SUPABASE_DB_PASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
           
           echo "❌ Migration failed, attempting rollback..."
+          echo "🔄 Rolling back to previous migration on $PROJECT_REF..."
           sqitch revert --to @HEAD~1 "$DATABASE_URL" || echo "Rollback failed - manual intervention required" 
