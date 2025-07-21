@@ -2,21 +2,12 @@ name: Database Migrations
 
 on:
   push:
-    branches: [main-v3, develop]
+    branches: [main-v3]
     paths: ['db/**']
   pull_request:
-    branches: [main-v3, develop]
+    branches: [main-v3]
     paths: ['db/**']
   workflow_dispatch:
-    inputs:
-      target_environment:
-        description: 'Target environment (staging/production)'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-        - staging
-        - production
 
 jobs:
   verify-migrations:
@@ -35,7 +26,6 @@ jobs:
       - name: Verify migration files
         run: |
           cd db/
-          # Check that all required migration files exist
           echo "Checking migration file structure..."
           
           # Verify all migrations in plan have corresponding files
@@ -70,14 +60,11 @@ jobs:
           cd db/
           echo "✅ Migration plan verification:"
           cat sqitch.plan
-          echo ""
-          echo "✅ Migration files exist:"
-          ls -la deploy/ revert/ verify/
 
-  deploy-staging:
+  deploy-database:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'staging')
-    environment: staging
+    if: github.ref == 'refs/heads/main-v3' || github.event_name == 'workflow_dispatch'
+    environment: production
     
     steps:
       - name: Checkout code
@@ -94,162 +81,55 @@ jobs:
         run: |
           if [[ -z "$SUPABASE_URL" ]]; then
             echo "❌ SUPABASE_URL secret is not set!"
-            echo "Please configure the SUPABASE_URL secret in your repository settings."
             exit 1
           fi
           
-          echo "🔗 Supabase URL: $SUPABASE_URL"
           PROJECT_REF=$(echo "$SUPABASE_URL" | sed 's|https://||' | sed 's|\.supabase\.co||')
           
           if [[ -z "$PROJECT_REF" ]]; then
             echo "❌ Failed to extract project reference from URL: $SUPABASE_URL"
-            echo "Expected format: https://your-project-id.supabase.co"
             exit 1
           fi
           
-          echo "📋 Project reference: $PROJECT_REF"
+          echo "📋 Project: $PROJECT_REF"
           echo "PROJECT_REF=$PROJECT_REF" >> $GITHUB_ENV
           
-      - name: Deploy migrations to staging
+      - name: Deploy migrations
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           if [[ -z "$SUPABASE_DB_PASSWORD" ]]; then
             echo "❌ SUPABASE_DB_PASSWORD secret is not set!"
-            echo "Please configure the SUPABASE_DB_PASSWORD secret in your repository settings."
-            exit 1
-          fi
-          
-          if [[ -z "$PROJECT_REF" ]]; then
-            echo "❌ PROJECT_REF environment variable is not set!"
             exit 1
           fi
           
           cd db/
-          # Build connection string (same format as our API)
-          # Note: We don't echo this to avoid GitHub secret masking issues
           export DATABASE_URL="db:pg://postgres.${PROJECT_REF}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
-
+          
           echo "🔗 Connecting to database..."
           echo "📋 Project: $PROJECT_REF"
           echo "🌐 Host: aws-0-us-east-2.pooler.supabase.com:6543"
-          echo "🔒 Connection string built (password masked for security)"
           
           echo "📊 Current migration status:"
           sqitch status "$DATABASE_URL" || echo "No previous migrations"
           
-          echo "🚀 Deploying migrations to staging database..."
+          echo "🚀 Deploying migrations..."
           sqitch deploy "$DATABASE_URL"
           
           echo "✅ Verifying migrations..."
           sqitch verify "$DATABASE_URL"
           
-      - name: Migration success notification
-        if: success()
-        run: |
-          echo "✅ Staging database migrations deployed successfully!"
-          echo "🔗 Check Supabase Studio: ${{ secrets.SUPABASE_URL }}"
-
-  deploy-production:
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main-v3' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'production')
-    environment: production
-    needs: []  # No dependencies for main branch
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
-      - name: Install Sqitch
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y sqitch libdbd-pg-perl postgresql-client
-          
-      - name: Extract project reference from Supabase URL
-        env:
-          SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
-        run: |
-          if [[ -z "$SUPABASE_URL" ]]; then
-            echo "❌ PRODUCTION_SUPABASE_URL secret is not set!"
-            echo "Please configure the PRODUCTION_SUPABASE_URL secret in your repository settings."
-            exit 1
-          fi
-          
-          echo "🔗 Production Supabase URL: $SUPABASE_URL"
-          PROJECT_REF=$(echo "$SUPABASE_URL" | sed 's|https://||' | sed 's|\.supabase\.co||')
-          
-          if [[ -z "$PROJECT_REF" ]]; then
-            echo "❌ Failed to extract project reference from URL: $SUPABASE_URL"
-            echo "Expected format: https://your-project-id.supabase.co"
-            exit 1
-          fi
-          
-          echo "📋 Production project reference: $PROJECT_REF"
-          echo "PROJECT_REF=$PROJECT_REF" >> $GITHUB_ENV
-          
-      - name: Check migration status
-        env:
-          SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}
-        run: |
-          if [[ -z "$SUPABASE_DB_PASSWORD" ]]; then
-            echo "❌ PRODUCTION_SUPABASE_DB_PASSWORD secret is not set!"
-            exit 1
-          fi
-          
-          if [[ -z "$PROJECT_REF" ]]; then
-            echo "❌ PROJECT_REF environment variable is not set!"
-            exit 1
-          fi
-          
-          cd db/
-          # Build connection string (avoid logging to prevent secret masking issues)
-          export DATABASE_URL="db:pg://postgres.${PROJECT_REF}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
-          
-          echo "🔍 Checking current migration status..."
-          echo "🔒 Using connection to $PROJECT_REF database..."
-          sqitch status "$DATABASE_URL" || echo "No previous migrations deployed"
-          
-          echo "📋 Planned migrations:"
-          cat sqitch.plan
-          
-      - name: Deploy migrations to production
-        env:
-          SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}
-        run: |
-          cd db/
-          # Build connection string (avoid logging to prevent secret masking issues)
-          export DATABASE_URL="db:pg://postgres.${PROJECT_REF}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
-          
-          echo "🔗 Connecting to production database..."
-          echo "📋 Project: $PROJECT_REF"
-          echo "🌐 Host: aws-0-us-east-2.pooler.supabase.com:6543"
-          echo "🔒 Production connection string built (password masked for security)"
-          
-          echo "🚀 Deploying migrations to production database..."
-          sqitch deploy "$DATABASE_URL"
-          
-          echo "✅ Verifying migrations..."
-          sqitch verify "$DATABASE_URL"
-          
-      - name: Production migration success
-        if: success()
-        run: |
-          echo "✅ Production database migrations deployed successfully!"
-          echo "🔗 Check Supabase Studio: ${{ secrets.PRODUCTION_SUPABASE_URL }}"
+          echo "✅ Database migrations completed successfully!"
           
       - name: Migration failure rollback
         if: failure()
         env:
-          SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           cd db/
-          # Build connection string for rollback
           export DATABASE_URL="db:pg://postgres.${PROJECT_REF}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
           
           echo "❌ Migration failed, attempting rollback..."
-          echo "🔄 Rolling back to previous migration on $PROJECT_REF..."
           sqitch revert --to @HEAD~1 "$DATABASE_URL" || echo "Rollback failed - manual intervention required" 

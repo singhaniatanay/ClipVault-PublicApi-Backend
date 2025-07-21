@@ -111,19 +111,16 @@ db/
 
 Migrations are automatically deployed via GitHub Actions:
 
-- **Pull Requests**: Syntax verification and dry-run testing
-- **`develop` branch**: Auto-deploy to staging database
-- **`main` branch**: Auto-deploy to production database
-- **Manual trigger**: Deploy to specific environment via workflow dispatch
+- **Pull Requests**: Migration file verification
+- **`main` branch**: Auto-deploy to database
+- **Manual trigger**: Deploy via workflow dispatch
 
 ### GitHub Secrets Required
 
 | Secret | Description | Example |
 |--------|-------------|---------|
-| `SUPABASE_URL` | Staging Supabase project URL | `https://abc123.supabase.co` |
-| `SUPABASE_DB_PASSWORD` | Staging database password | `your-staging-password` |
-| `PRODUCTION_SUPABASE_URL` | Production Supabase project URL | `https://xyz789.supabase.co` |
-| `PRODUCTION_SUPABASE_DB_PASSWORD` | Production database password | `your-production-password` |
+| `SUPABASE_URL` | Supabase project URL | `https://abc123.supabase.co` |
+| `SUPABASE_DB_PASSWORD` | Database password | `your-database-password` |
 
 ## 🔍 Testing Migrations
 
@@ -246,5 +243,5 @@ If migrations fail in production:
 
 - [Sqitch Documentation](https://sqitch.org/docs/)
 - [Supabase Database Guide](https://supabase.com/docs/guides/database)
-- [PostgreSQL RLS Documentation](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
+- [Sqitch Documentation](https://sqitch.org/docs/)
 - [ClipVault LLD](../.context/LLD%20Public%20API.md) 

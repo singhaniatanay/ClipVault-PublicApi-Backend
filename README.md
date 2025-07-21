@@ -51,9 +51,8 @@
 
 For automated database migrations via GitHub Actions:
 
-1. **Configure GitHub Secrets**: See [`docs/GITHUB_SETUP.md`](docs/GITHUB_SETUP.md)
-2. **Test Your Setup**: Run `./scripts/test-db-connection.sh`
-3. **Deploy Database**: Run `cd db && ./deploy.sh`
+1. **Configure GitHub Secrets**: `SUPABASE_URL` and `SUPABASE_DB_PASSWORD`
+2. **Deploy Database**: Run `cd db && ./deploy.sh`
 
 ### Installation & Development
 

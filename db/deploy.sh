@@ -67,13 +67,13 @@ case $ENVIRONMENT in
         DATABASE_URL="postgresql://postgres.${PROJECT_REF}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
         ;;
     production)
-        if [[ -z "${PRODUCTION_SUPABASE_URL:-}" ]] || [[ -z "${PRODUCTION_SUPABASE_DB_PASSWORD:-}" ]]; then
-            echo_error "Missing required production environment variables:"
-            echo_info "PRODUCTION_SUPABASE_URL and PRODUCTION_SUPABASE_DB_PASSWORD must be set"
+        if [[ -z "${SUPABASE_URL:-}" ]] || [[ -z "${SUPABASE_DB_PASSWORD:-}" ]]; then
+            echo_error "Missing required environment variables:"
+            echo_info "SUPABASE_URL and SUPABASE_DB_PASSWORD must be set"
             exit 1
         fi
-        PROJECT_REF=$(echo "$PRODUCTION_SUPABASE_URL" | sed 's|https://||' | sed 's|\.supabase\.co||')
-        DATABASE_URL="postgresql://postgres.${PROJECT_REF}:${PRODUCTION_SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
+        PROJECT_REF=$(echo "$SUPABASE_URL" | sed 's|https://||' | sed 's|\.supabase\.co||')
+        DATABASE_URL="postgresql://postgres.${PROJECT_REF}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
         ;;
     *)
         echo_error "Invalid environment: $ENVIRONMENT"
