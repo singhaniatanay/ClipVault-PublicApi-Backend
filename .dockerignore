@@ -1,94 +1,45 @@
-# Git and version control
+# Git
 .git
 .gitignore
-.gitattributes
 
-# Python
+# Python bytecode and caches
 __pycache__
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
 
 # Virtual environments
 venv/
-env/
-ENV/
-env.bak/
-venv.bak/
 .venv/
+env/
 
-# Testing
-.coverage
-.pytest_cache/
-.tox/
-.nox/
-htmlcov/
-.hypothesis/
-coverage.xml
-*.cover
-nosetests.xml
-
-# IDEs and editors
+# IDE and editor files
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 .DS_Store
 
-# Documentation
-README.md
-*.md
-docs/
-
-# CI/CD
-.github/
-.gitlab-ci.yml
-
-# Local development
-.env
-.env.local
-.env.development
-.env.test
-.env.production
+# Local development files
+.env*
 docker-compose.yml
 docker-compose.*.yml
 
-# Infrastructure
-infra/
-terraform.tfstate*
-.terraform/
-*.tfvars
-
-# Context and project files
+# Context documentation (not needed in container)
 .context/
-
-# Node.js (if any)
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # Logs
 *.log
 logs/
+
+# Coverage and test artifacts
+htmlcov/
+.coverage
+coverage.xml
+.tox/
 
 # Temporary files
 tmp/
