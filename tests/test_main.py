@@ -12,7 +12,10 @@ def test_health_check() -> None:
     """Test the health check endpoint."""
     response = client.get("/ping")
     assert response.status_code == 200
-    assert response.json() == {"pong": True}
+    data = response.json()
+    assert data["pong"] is True
+    assert "environment" in data
+    assert "version" in data
 
 
 def test_root_endpoint() -> None:

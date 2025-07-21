@@ -1,257 +1,163 @@
 # ClipVault Public API
 
-FastAPI-based public API for ClipVault MVP - providing link ingestion, search, and collections functionality with automatic cloud deployment on Google Cloud Run.
-
-## Features
-
-- **Link Ingestion**: Save and process links with AI-powered content extraction
-- **Full-Text Search**: Search across transcripts and summaries using PostgreSQL FTS
-- **Collections**: Organize clips into user-defined collections
-- **Authentication**: Supabase-based OAuth with JWT tokens
-- **Real-time Processing**: Event-driven architecture with Cloud Pub/Sub
-- **Cloud Native**: Deployed on Google Cloud Run with auto-scaling (0-20 instances)
-- **Automatic Deployment**: Google Cloud Build automatically deploys on repository pushes
-
-## Architecture
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   GitHub        │    │   Cloud Run      │    │   Supabase      │
-│   (Repository)  │───▶│   (FastAPI)      │───▶│   (Database)    │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-        │                        │
-        ▼                        ▼
-┌─────────────────┐    ┌──────────────────┐
-│  Cloud Build    │    │   Pub/Sub        │
-│  (Auto Deploy)  │    │   (Events)       │
-└─────────────────┘    └──────────────────┘
-```
+**ClipVault Public API** - FastAPI service for link ingestion, search, and collections.
 
 ## Quick Start
 
 ### Prerequisites
+- Python 3.12+
+- Poetry
+- Supabase project
 
-- **Python 3.12+**
-- **Poetry** (for dependency management)
-- **Docker & Docker Compose** (for local development)
-- **Google Cloud Project** (for deployment)
+### Environment Setup
 
-### Local Development
-
-1. **Clone the repository**:
+1. **Create environment file**:
    ```bash
-   git clone https://github.com/singhaniatanay/ClipVault-PublicApi-Backend.git
-   cd ClipVault-PublicAPI
+   cp .env.example .env  # If .env.example exists, or create .env manually
    ```
 
-2. **Install dependencies with Poetry**:
+2. **Configure Supabase variables** in `.env`:
    ```bash
-   poetry install
+   # General Settings
+   ENVIRONMENT=development
+   LOG_LEVEL=info
+   PORT=8000
+
+   # Supabase Configuration
+   # Get these from your Supabase project dashboard: Settings -> API
+   SUPABASE_URL=https://your-project-id.supabase.co
+   SUPABASE_ANON_KEY=your_supabase_anon_key_here
+   SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+   SUPABASE_JWT_SECRET=your_supabase_jwt_secret_here
+
+   # Optional - for future features
+   REDIS_URL=redis://localhost:6379/0
+   GOOGLE_CLOUD_PROJECT=your_gcp_project_id
+   PUBSUB_TOPIC_CLIP_CREATED=clip-created
    ```
 
-3. **Run locally with Poetry**:
-   ```bash
-   poetry run uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
-   ```
+3. **Get Supabase credentials**:
+   - Go to your Supabase project dashboard
+   - Navigate to **Settings** → **API**
+   - Copy the **Project URL** (SUPABASE_URL)
+   - Copy the **anon public** key (SUPABASE_ANON_KEY)
+   - Copy the **service_role** key (SUPABASE_SERVICE_ROLE_KEY)
+   - Navigate to **Settings** → **API** → **JWT Settings**
+   - Copy the **JWT Secret** (SUPABASE_JWT_SECRET)
 
-4. **Or use Docker Compose for full environment**:
-   ```bash
-   docker-compose up
-   ```
+### Installation & Development
 
-5. **Test the API**:
-   ```bash
-   curl http://localhost:8000/ping
-   # Should return: {"pong": true}
-   ```
+```bash
+# Install dependencies
+poetry install
 
-6. **View API documentation**:
-   - Swagger UI: http://localhost:8000/docs
-   - ReDoc: http://localhost:8000/redoc
+# Run development server
+poetry run python -m api.main
 
-### Running Tests
+# Or using uvicorn directly
+poetry run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Testing
 
 ```bash
 # Run all tests
 poetry run pytest
 
+# Run auth tests specifically
+poetry run pytest tests/test_auth.py -v
+
 # Run with coverage
-poetry run pytest --cov=api --cov-report=html
-
-# Run linting
-poetry run ruff check .
-poetry run ruff format .
-
-# Run type checking
-poetry run mypy .
+poetry run pytest --cov=api tests/
 ```
 
-## Cloud Deployment
+### API Endpoints
 
-### Automatic Deployment Setup
-
-The repository is configured for **automatic deployment** to Google Cloud Run using Google Cloud Build.
-
-#### Prerequisites
-
-1. **Google Cloud Project** with billing enabled
-2. **Required APIs enabled**:
-   ```bash
-   gcloud services enable cloudbuild.googleapis.com
-   gcloud services enable run.googleapis.com
-   gcloud services enable secretmanager.googleapis.com
-   ```
-
-3. **Create a service account** for Cloud Run:
-   ```bash
-   gcloud iam service-accounts create clipvault-api-staging \
-     --display-name="ClipVault API Staging"
-   ```
-
-4. **Set up Cloud Build trigger**:
-   - Go to [Cloud Build Triggers](https://console.cloud.google.com/cloud-build/triggers)
-   - Connect your GitHub repository
-   - Create trigger for `main` branch pushes
-   - Point to `cloudbuild.yaml` file
-
-#### Deployment Process
-
-1. **Push to main branch** - triggers automatic deployment
-2. **Cloud Build** builds Docker image from `docker/Dockerfile`
-3. **Image pushed** to Google Container Registry
-4. **Cloud Run service** automatically updated with new image
-
-### Manual Docker Build
-
-To test the production Docker image locally:
-
+#### Health Check
 ```bash
-# Build the production image
-docker build -f docker/Dockerfile -t clipvault-api .
-
-# Run the container
-docker run -p 8000:8000 clipvault-api
-
-# Test the deployment
 curl http://localhost:8000/ping
 ```
 
-### Cloud Run Configuration
-
-The service is configured with:
-- **Auto-scaling**: 0-20 instances
-- **Memory**: 512Mi per instance  
-- **CPU**: 1 vCPU per instance
-- **Port**: 8000
-- **Health checks**: `/ping` endpoint
-- **Public access**: Unauthenticated requests allowed
-
-## API Endpoints
-
-### Health & Status
-- `GET /ping` - Health check endpoint
-- `GET /` - API information and links
-
-### Authentication (Coming Soon)
-- `POST /auth/token` - Exchange OAuth code for JWT
-- `GET /me` - Get authenticated user profile
-
-### Clips (Coming Soon)
-- `POST /clips` - Save a new link
-- `GET /clips/{id}` - Get clip details
-- `GET /search` - Search clips by keyword/tags
-
-### Collections (Coming Soon)
-- `GET /collections` - List user collections
-- `POST /collections` - Create new collection
-- `PATCH /collections/{id}` - Update collection
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `ENVIRONMENT` | Environment name | No | `development` |
-| `PORT` | Server port | No | `8000` |
-| `PROJECT_ID` | GCP project ID | Yes | - |
-| `SUPABASE_URL` | Supabase project URL | Yes | - |
-| `SUPABASE_ANON_KEY` | Supabase anonymous key | Yes | - |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Yes | - |
-| `REDIS_URL` | Redis connection URL | No | - |
-| `PUBSUB_TOPIC` | Pub/Sub topic name | No | `clip-events` |
-
-### Secret Management
-
-For sensitive environment variables, use Google Cloud Secret Manager:
-
+#### Authentication
 ```bash
-# Create secrets
-gcloud secrets create supabase-url --data-file=-
-gcloud secrets create supabase-anon-key --data-file=-
-gcloud secrets create supabase-service-role-key --data-file=-
+# Test /me endpoint (requires valid JWT token)
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" http://localhost:8000/auth/me
 
-# Grant access to Cloud Run service account
-gcloud secrets add-iam-policy-binding supabase-url \
-  --member="serviceAccount:clipvault-api-staging@PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
+# Verify token
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" http://localhost:8000/auth/verify
 ```
+
+#### Documentation
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+## Authentication
+
+This API uses **Supabase JWT tokens** for authentication. Protected endpoints require a valid JWT token in the `Authorization` header:
+
+```
+Authorization: Bearer <your-jwt-token>
+```
+
+### Getting a JWT Token
+
+Currently, the OAuth token exchange endpoint (`POST /auth/token`) is not fully implemented. For testing, you can:
+
+1. **Generate test tokens** using your Supabase JWT secret
+2. **Use Supabase client libraries** in your frontend to get tokens
+3. **Use Supabase Auth UI** for development
+
+### Supported Endpoints
+
+- `POST /auth/token` - OAuth code exchange (placeholder)
+- `GET /auth/me` - Get current user profile
+- `GET /auth/verify` - Verify token validity
 
 ## Project Structure
 
 ```
-ClipVault-PublicAPI/
-├── api/                    # Main application package
-│   ├── __init__.py
-│   ├── main.py            # FastAPI application
-│   └── (routes, services, etc. - coming soon)
-├── tests/                 # Test suite
-├── docker/                # Docker configuration
-│   ├── Dockerfile         # Production container
-│   └── Dockerfile.dev     # Development container
-├── cloudbuild.yaml        # Google Cloud Build configuration
-├── docker-compose.yml     # Development environment
-├── pyproject.toml         # Poetry configuration
-└── README.md             # This file
+api/
+├── main.py           # FastAPI application
+├── routes/
+│   └── auth.py       # Authentication routes
+├── services/
+│   └── auth.py       # Authentication service & JWT validation
+└── schemas/
+    └── auth.py       # Pydantic models for auth
+
+tests/
+└── test_auth.py      # Authentication tests
 ```
 
-## Development Workflow
+## Task Status
 
-1. **Create feature branch**: `git checkout -b feature/my-feature`
-2. **Make changes and test locally**
-3. **Run tests**: `poetry run pytest`
-4. **Create pull request**: Review changes
-5. **Merge to main**: Triggers automatic deployment to staging
+✅ **API-AUTH-003**: Supabase Auth middleware - COMPLETED
+- [x] JWKS fetching and caching
+- [x] JWT verification with PyJWT
+- [x] FastAPI dependency `get_current_user()`
+- [x] 401/403 exception handlers
+- [x] `/me` endpoint returning 401 without token
+- [x] Comprehensive test suite
 
-## Monitoring
+## Next Steps
 
-- **Cloud Run Logs**: Available in Google Cloud Console
-- **Health Check**: `/ping` endpoint returns `{"pong": true}`
-- **API Documentation**: Available at `/docs` when service is running
-- **Metrics**: Built-in Cloud Run metrics for requests, latency, errors
+- **API-DB-004**: Supabase Postgres wrapper
+- **API-ROUTE-006**: `/auth/token` endpoint implementation
+- **API-ROUTE-008**: `/clips` POST endpoint
 
-## Contributing
+## Docker Development
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
+```bash
+# Build and run with docker-compose
+docker-compose up --build
 
-## Security
+# API will be available at http://localhost:8000
+```
 
-- **Non-root container**: App runs as non-root user
-- **Minimal attack surface**: Multi-stage Docker build
-- **Dependency scanning**: Keep dependencies updated
-- **HTTPS**: Cloud Run provides automatic TLS termination
+## Production Deployment
 
-## Support
+This API is designed for deployment on **Google Cloud Run**. See the `docker/` and infrastructure configuration for deployment details.
 
-- **Issues**: Use GitHub Issues for bug reports and feature requests
-- **Documentation**: Available at `/docs` endpoint when running
-- **Monitoring**: Cloud Run logs and metrics in GCP Console
+---
 
-## License
-
-MIT License - see LICENSE file for details. 
+For more details, see the [LLD Public API](.context/LLD%20Public%20API.md) and [Task Breakdown](.context/Task%20Breakdown%20for%20Public%20API.md) documents. 

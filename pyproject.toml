@@ -25,6 +25,8 @@ opentelemetry-sdk = "^1.21.0"
 opentelemetry-instrumentation-fastapi = "^0.42b0"
 opentelemetry-instrumentation-asyncpg = "^0.42b0"
 opentelemetry-exporter-gcp-trace = "^1.6.0"
+email-validator = "^2.2.0"
+python-dotenv = "^1.1.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"

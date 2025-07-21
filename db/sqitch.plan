@@ -1,0 +1,7 @@
+%syntax-version=1.0.0
+%project=clipvault-schema
+%uri=https://github.com/your-org/ClipVault-PublicAPI
+
+01_init_tables 2025-01-22T02:30:00Z ClipVault Team <dev@clipvault.com> # Create core tables for ClipVault schema
+02_indices 2025-01-22T02:30:00Z ClipVault Team <dev@clipvault.com> # Add performance and FTS indices
+03_rls_policies 2025-01-22T02:30:00Z ClipVault Team <dev@clipvault.com> # Add Row Level Security policies 

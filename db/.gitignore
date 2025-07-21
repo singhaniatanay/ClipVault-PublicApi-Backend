@@ -1,0 +1,14 @@
+# Sqitch state files
+sqitch.db
+
+# Database dumps
+*.sql.backup
+*.dump
+
+# Local database files
+*.sqlite3
+*.db
+
+# Temporary files
+*.tmp
+.DS_Store 
