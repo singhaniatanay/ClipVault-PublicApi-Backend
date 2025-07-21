@@ -114,7 +114,7 @@ dmypy.json
 .pyre/
 
 # Poetry
-poetry.lock
+# poetry.lock
 
 # IDE
 .vscode/
@@ -163,4 +163,12 @@ node_modules/
 
 # Temporary files
 tmp/
-temp/ 
+temp/
+
+# Cloud deployment
+gcp-key.json
+service-account.json
+
+# Environment-specific files
+.env.staging
+.env.production 
