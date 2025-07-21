@@ -27,10 +27,7 @@ class AuthService:
         self.supabase_anon_key = os.getenv("SUPABASE_ANON_KEY") 
         self.supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         self.jwt_secret = os.getenv("SUPABASE_JWT_SECRET")
-        print(f"SUPABASE_URL: {self.supabase_url}")
-        print(f"SUPABASE_ANON_KEY: {self.supabase_anon_key}")
-        print(f"SUPABASE_SERVICE_ROLE_KEY: {self.supabase_service_key}")
-        print(f"SUPABASE_JWT_SECRET: {self.jwt_secret}")
+       
         if raise_on_missing_env and not all([self.supabase_url, self.jwt_secret]):
             raise ValueError("Missing required Supabase environment variables")
             
