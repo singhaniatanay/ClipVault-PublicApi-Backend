@@ -2,10 +2,10 @@ name: Database Migrations
 
 on:
   push:
-    branches: [main-v2, develop]
+    branches: [main-v3, develop]
     paths: ['db/**']
   pull_request:
-    branches: [main-v2, develop]
+    branches: [main-v3, develop]
     paths: ['db/**']
   workflow_dispatch:
     inputs:
@@ -121,7 +121,7 @@ jobs:
 
   deploy-production:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main-v2' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'production')
+    if: github.ref == 'refs/heads/main-v3' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'production')
     environment: production
     needs: []  # No dependencies for main branch
     
