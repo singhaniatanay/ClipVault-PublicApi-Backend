@@ -129,7 +129,7 @@ jobs:
           cd db/
           # Build connection string (same format as our API)
           # Note: We don't echo this to avoid GitHub secret masking issues
-          export DATABASE_URL="postgresql://postgres.${PROJECT_REF}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"          
+          export DATABASE_URL="db:pg://postgres.${PROJECT_REF}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
 
           echo "🔗 Connecting to database..."
           echo "📋 Project: $PROJECT_REF"
