@@ -16,6 +16,7 @@ load_dotenv()
 
 # Import auth service and routes
 from api.services.auth import init_auth_service, shutdown_auth_service
+from api.services.supabase import init_database_service, shutdown_database_service
 from api.routes import auth
 
 # Configure structured logging for production
@@ -80,6 +81,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("Failed to initialize auth service", error=str(e))
         # Continue startup - auth service can be initialized on first request
 
+    # Initialize database service
+    try:
+        await init_database_service()
+        logger.info("Database service initialized successfully")
+    except Exception as e:
+        logger.error("Failed to initialize database service", error=str(e))
+        logger.warning("Starting API without database - some features will be limited")
+        # Continue startup - we can still serve auth and health endpoints
+
     # TODO: Initialize database connections, Redis, etc.
     # Example:
     # try:
@@ -101,6 +111,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Auth service shut down successfully")
     except Exception as e:
         logger.error("Error shutting down auth service", error=str(e))
+    
+    # Cleanup database service
+    try:
+        await shutdown_database_service()
+        logger.info("Database service shut down successfully")
+    except Exception as e:
+        logger.error("Error shutting down database service", error=str(e))
     
     # TODO: Close database connections, Redis, etc.
     # await close_database()
@@ -177,6 +194,37 @@ async def health_check() -> HealthResponse:
         environment=os.getenv("ENVIRONMENT", "development"),
         version="0.1.0"
     )
+
+
+@app.get("/health", tags=["Health"])
+async def detailed_health_check():
+    """Detailed health check including database status."""
+    from api.services.database import get_database
+    
+    try:
+        db = await get_database()
+        db_health = await db.health_check()
+        
+        return {
+            "status": "healthy",
+            "environment": os.getenv("ENVIRONMENT", "development"),
+            "version": "0.1.0",
+            "services": {
+                "api": "healthy",
+                "database": db_health
+            }
+        }
+    except Exception as e:
+        logger.error("Health check failed", error=str(e))
+        return {
+            "status": "unhealthy",
+            "environment": os.getenv("ENVIRONMENT", "development"), 
+            "version": "0.1.0",
+            "services": {
+                "api": "healthy",
+                "database": {"status": "unhealthy", "error": str(e)}
+            }
+        }
 
 
 @app.get("/", include_in_schema=False)

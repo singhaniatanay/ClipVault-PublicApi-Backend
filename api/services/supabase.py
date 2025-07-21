@@ -1,0 +1,346 @@
+"""Supabase Postgres database service for ClipVault Public API."""
+
+import os
+import asyncio
+from typing import Any, Dict, List, Optional, Union, AsyncContextManager
+from contextlib import asynccontextmanager
+import asyncpg
+import structlog
+from fastapi import HTTPException, status
+
+logger = structlog.get_logger()
+
+
+class SupabaseDB:
+    """Supabase PostgreSQL database service with connection pooling and RLS support."""
+    
+    def __init__(self):
+        """Initialize the database service."""
+        self.supabase_url = os.getenv("SUPABASE_URL")
+        self.service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        self.database_password = os.getenv("SUPABASE_DB_PASSWORD")
+        self.pool: Optional[asyncpg.Pool] = None
+        
+        if not all([self.supabase_url, self.database_password]):
+            raise ValueError("Missing required Supabase environment variables for database")
+    
+    def _build_connection_string(self) -> str:
+        """Build PostgreSQL connection string from Supabase URL."""
+        if not self.supabase_url or not self.database_password:
+            raise ValueError("SUPABASE_URL and SUPABASE_DB_PASSWORD are required")
+            
+        # Extract project reference from Supabase URL
+        # Format: https://project-ref.supabase.co
+        project_ref = self.supabase_url.replace("https://", "").replace(".supabase.co", "")
+        
+        # Build PostgreSQL connection string using Supabase pooler
+        # Supabase uses connection pooling with a specific hostname format
+        connection_string = (
+            f"postgresql://postgres.{project_ref}:{self.database_password}@"
+            f"aws-0-us-east-2.pooler.supabase.com:6543/postgres"
+        )
+        
+        logger.debug("Database connection string built", project_ref=project_ref)
+        return connection_string
+    
+    
+    async def initialize(self) -> None:
+        """Initialize the database connection pool."""
+        try:
+            dsn = self._build_connection_string()             # keep your helper
+            logger.info("Initializing database connection pool")
+
+            self.pool = await asyncpg.create_pool(
+                dsn,                     # <-- pass as DSN
+                ssl="require",           # always encrypt
+                statement_cache_size=0,  # <-- KEY LINE: disable prepared‑stmt cache
+                min_size=2,
+                max_size=20,
+                max_queries=50_000,
+                max_inactive_connection_lifetime=300,
+                timeout=30,
+                command_timeout=60,
+                server_settings={
+                    "application_name": "clipvault-api",
+                    "timezone": "UTC",
+                },
+            )
+
+            async with self.pool.acquire() as conn:
+                assert await conn.fetchval("SELECT 1") == 1
+
+            logger.info("Database connection pool initialized")
+
+        except Exception as e:
+            logger.error("Database init failed", error=str(e))
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database service unavailable",
+            )
+
+    
+    async def close(self) -> None:
+        """Close the database connection pool."""
+        if self.pool:
+            logger.info("Closing database connection pool")
+            await self.pool.close()
+            self.pool = None
+            logger.info("Database connection pool closed")
+    
+    def _ensure_pool(self) -> asyncpg.Pool:
+        """Ensure database pool is available."""
+        if not self.pool:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database connection pool not initialized"
+            )
+        return self.pool
+    
+    @asynccontextmanager
+    async def _get_connection(self, user_id: Optional[str] = None) -> AsyncContextManager[asyncpg.Connection]:
+        """Get database connection with optional RLS user context."""
+        pool = self._ensure_pool()
+        
+        async with pool.acquire() as conn:
+            try:
+                # Set RLS user context if provided
+                if user_id:
+                    await conn.execute(
+                        "SELECT set_config('request.jwt.claims.sub', $1, true)",
+                        user_id
+                    )
+                    logger.debug("Set RLS user context", user_id=user_id)
+                
+                yield conn
+                
+            except Exception as e:
+                logger.error(
+                    "Database connection error",
+                    error=str(e),
+                    user_id=user_id
+                )
+                raise
+    
+    async def fetch_one(
+        self, 
+        query: str, 
+        *args, 
+        user_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Fetch a single row from the database."""
+        try:
+            async with self._get_connection(user_id) as conn:
+                row = await conn.fetchrow(query, *args)
+                result = dict(row) if row else None
+                
+                logger.debug(
+                    "Database fetch_one executed",
+                    query=query[:100],
+                    args_count=len(args),
+                    has_result=result is not None,
+                    user_id=user_id
+                )
+                
+                return result
+                
+        except Exception as e:
+            logger.error(
+                "Database fetch_one failed",
+                error=str(e),
+                query=query[:100],
+                user_id=user_id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database query failed"
+            )
+    
+    async def fetch_all(
+        self, 
+        query: str, 
+        *args, 
+        user_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Fetch multiple rows from the database."""
+        try:
+            async with self._get_connection(user_id) as conn:
+                rows = await conn.fetch(query, *args)
+                results = [dict(row) for row in rows]
+                
+                logger.debug(
+                    "Database fetch_all executed",
+                    query=query[:100],
+                    args_count=len(args),
+                    row_count=len(results),
+                    user_id=user_id
+                )
+                
+                return results
+                
+        except Exception as e:
+            logger.error(
+                "Database fetch_all failed",
+                error=str(e),
+                query=query[:100],
+                user_id=user_id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database query failed"
+            )
+    
+    async def execute(
+        self, 
+        query: str, 
+        *args, 
+        user_id: Optional[str] = None
+    ) -> str:
+        """Execute a query (INSERT/UPDATE/DELETE) and return status."""
+        try:
+            async with self._get_connection(user_id) as conn:
+                status_result = await conn.execute(query, *args)
+                
+                logger.debug(
+                    "Database execute completed",
+                    query=query[:100],
+                    args_count=len(args),
+                    status=status_result,
+                    user_id=user_id
+                )
+                
+                return status_result
+                
+        except Exception as e:
+            logger.error(
+                "Database execute failed",
+                error=str(e),
+                query=query[:100],
+                user_id=user_id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database operation failed"
+            )
+    
+    async def execute_many(
+        self, 
+        query: str, 
+        args_list: List[tuple], 
+        user_id: Optional[str] = None
+    ) -> None:
+        """Execute a query with multiple parameter sets (batch operation)."""
+        try:
+            async with self._get_connection(user_id) as conn:
+                await conn.executemany(query, args_list)
+                
+                logger.debug(
+                    "Database execute_many completed",
+                    query=query[:100],
+                    batch_size=len(args_list),
+                    user_id=user_id
+                )
+                
+        except Exception as e:
+            logger.error(
+                "Database execute_many failed",
+                error=str(e),
+                query=query[:100],
+                batch_size=len(args_list),
+                user_id=user_id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database batch operation failed"
+            )
+    
+    async def fetch_val(
+        self, 
+        query: str, 
+        *args, 
+        user_id: Optional[str] = None
+    ) -> Any:
+        """Fetch a single value from the database."""
+        try:
+            async with self._get_connection(user_id) as conn:
+                result = await conn.fetchval(query, *args)
+                
+                logger.debug(
+                    "Database fetch_val executed",
+                    query=query[:100],
+                    args_count=len(args),
+                    user_id=user_id
+                )
+                
+                return result
+                
+        except Exception as e:
+            logger.error(
+                "Database fetch_val failed",
+                error=str(e),
+                query=query[:100],
+                user_id=user_id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database query failed"
+            )
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """Check database health and connection pool status."""
+        try:
+            pool = self._ensure_pool()
+            
+            # Test query
+            start_time = asyncio.get_event_loop().time()
+            result = await self.fetch_val("SELECT 1")
+            query_time = (asyncio.get_event_loop().time() - start_time) * 1000
+            
+            return {
+                "database": "healthy",
+                "pool_size": pool.get_size(),
+                "pool_min_size": pool.get_min_size(),
+                "pool_max_size": pool.get_max_size(),
+                "query_time_ms": round(query_time, 2),
+                "test_query_result": result
+            }
+            
+        except Exception as e:
+            logger.error("Database health check failed", error=str(e))
+            return {
+                "database": "unhealthy",
+                "error": str(e)
+            }
+
+
+# Global database service instance
+_database_service: Optional[SupabaseDB] = None
+
+
+def get_database_service() -> SupabaseDB:
+    """Get or create the global database service instance."""
+    global _database_service
+    if _database_service is None:
+        _database_service = SupabaseDB()
+    return _database_service
+
+
+async def init_database_service() -> None:
+    """Initialize the database service on app startup."""
+    try:
+        logger.info("Initializing database service")
+        db_service = get_database_service()
+        await db_service.initialize()
+        logger.info("Database service initialized successfully")
+    except Exception as e:
+        logger.error("Failed to initialize database service", error=str(e))
+        raise
+
+
+async def shutdown_database_service() -> None:
+    """Cleanup database service on app shutdown."""
+    global _database_service
+    if _database_service:
+        logger.info("Shutting down database service")
+        await _database_service.close()
+        _database_service = None
+        logger.info("Database service shut down successfully") 
