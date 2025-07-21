@@ -44,6 +44,16 @@
    - Copy the **service_role** key (SUPABASE_SERVICE_ROLE_KEY)
    - Navigate to **Settings** → **API** → **JWT Settings**
    - Copy the **JWT Secret** (SUPABASE_JWT_SECRET)
+   - Navigate to **Settings** → **Database** → **Connection pooling**
+   - Copy the **Password** (SUPABASE_DB_PASSWORD)
+
+### 🔄 CI/CD & Database Setup
+
+For automated database migrations via GitHub Actions:
+
+1. **Configure GitHub Secrets**: See [`docs/GITHUB_SETUP.md`](docs/GITHUB_SETUP.md)
+2. **Test Your Setup**: Run `./scripts/test-db-connection.sh`
+3. **Deploy Database**: Run `cd db && ./deploy.sh`
 
 ### Installation & Development
 
