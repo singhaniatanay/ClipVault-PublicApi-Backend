@@ -9,6 +9,14 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Import auth service and routes
+from api.services.auth import init_auth_service, shutdown_auth_service
+from api.routes import auth
 
 # Configure structured logging for production
 def configure_logging():
@@ -64,6 +72,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         port=os.getenv("PORT", "8000")
     )
 
+    # Initialize auth service
+    try:
+        await init_auth_service()
+        logger.info("Auth service initialized successfully")
+    except Exception as e:
+        logger.error("Failed to initialize auth service", error=str(e))
+        # Continue startup - auth service can be initialized on first request
+
     # TODO: Initialize database connections, Redis, etc.
     # Example:
     # try:
@@ -78,6 +94,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Shutdown
     logger.info("Shutting down ClipVault Public API")
+    
+    # Cleanup auth service
+    try:
+        await shutdown_auth_service()
+        logger.info("Auth service shut down successfully")
+    except Exception as e:
+        logger.error("Error shutting down auth service", error=str(e))
+    
     # TODO: Close database connections, Redis, etc.
     # await close_database()
     # await close_redis()
@@ -104,6 +128,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register route modules
+app.include_router(auth.router)
 
 
 @app.middleware("http")
@@ -162,6 +189,20 @@ async def root() -> dict[str, str]:
         "docs": "/docs",
         "health": "/ping"
     }
+
+
+# Add a simple endpoint to test auth (shortcut access to /me)
+@app.get("/me", include_in_schema=False)
+async def me_shortcut():
+    """Shortcut to /auth/me - convenience for testing."""
+    from fastapi import Depends
+    from api.services.auth import get_current_user
+    from api.schemas.auth import UserProfile
+    from api.routes.auth import get_me
+    
+    # This just redirects to the actual /auth/me endpoint
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/auth/me", status_code=307)
 
 
 # Error handlers for better production error handling

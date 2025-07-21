@@ -1,158 +1,163 @@
 # ClipVault Public API
 
-FastAPI-based public API for ClipVault MVP - providing link ingestion, search, and collections functionality.
-
-## Features
-
-- **Link Ingestion**: Save and process links with AI-powered content extraction
-- **Full-Text Search**: Search across transcripts and summaries using PostgreSQL FTS
-- **Collections**: Organize clips into user-defined collections
-- **Authentication**: Supabase-based OAuth with JWT tokens
-- **Real-time Processing**: Event-driven architecture with Cloud Pub/Sub
+**ClipVault Public API** - FastAPI service for link ingestion, search, and collections.
 
 ## Quick Start
 
 ### Prerequisites
-
 - Python 3.12+
-- Poetry (for dependency management)
-- Docker & Docker Compose (for development)
+- Poetry
+- Supabase project
 
-### Local Development
+### Environment Setup
 
-1. **Clone the repository**:
+1. **Create environment file**:
    ```bash
-   git clone <repository-url>
-   cd ClipVault-PublicAPI
+   cp .env.example .env  # If .env.example exists, or create .env manually
    ```
 
-2. **Install dependencies with Poetry**:
+2. **Configure Supabase variables** in `.env`:
    ```bash
-   poetry install
+   # General Settings
+   ENVIRONMENT=development
+   LOG_LEVEL=info
+   PORT=8000
+
+   # Supabase Configuration
+   # Get these from your Supabase project dashboard: Settings -> API
+   SUPABASE_URL=https://your-project-id.supabase.co
+   SUPABASE_ANON_KEY=your_supabase_anon_key_here
+   SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+   SUPABASE_JWT_SECRET=your_supabase_jwt_secret_here
+
+   # Optional - for future features
+   REDIS_URL=redis://localhost:6379/0
+   GOOGLE_CLOUD_PROJECT=your_gcp_project_id
+   PUBSUB_TOPIC_CLIP_CREATED=clip-created
    ```
 
-3. **Run the application**:
-   ```bash
-   poetry run python -m api.main
-   ```
-   
-   Or using uvicorn directly:
-   ```bash
-   poetry run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
-   ```
+3. **Get Supabase credentials**:
+   - Go to your Supabase project dashboard
+   - Navigate to **Settings** → **API**
+   - Copy the **Project URL** (SUPABASE_URL)
+   - Copy the **anon public** key (SUPABASE_ANON_KEY)
+   - Copy the **service_role** key (SUPABASE_SERVICE_ROLE_KEY)
+   - Navigate to **Settings** → **API** → **JWT Settings**
+   - Copy the **JWT Secret** (SUPABASE_JWT_SECRET)
 
-4. **Test the health endpoint**:
-   ```bash
-   curl http://localhost:8000/ping
-   # Expected response: {"pong": true}
-   ```
+### Installation & Development
 
-### Docker Development
-
-1. **Build and run with docker-compose**:
-   ```bash
-   docker-compose up --build
-   ```
-
-2. **Test the health endpoint**:
-   ```bash
-   curl http://localhost:8000/ping
-   # Expected response: {"pong": true}
-   ```
-
-3. **View logs**:
-   ```bash
-   docker-compose logs -f api
-   ```
-
-## API Documentation
-
-Once running, visit:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-
-## Development
-
-### Code Quality
-
-This project uses several tools to maintain code quality:
-
-- **Ruff**: Fast Python linter and formatter
-- **MyPy**: Static type checking
-- **Black**: Code formatting
-- **isort**: Import sorting
-
-Run quality checks:
 ```bash
-# Lint with Ruff
-poetry run ruff check .
+# Install dependencies
+poetry install
 
-# Type check with MyPy
-poetry run mypy .
+# Run development server
+poetry run python -m api.main
 
-# Format code
-poetry run black .
-poetry run isort .
+# Or using uvicorn directly
+poetry run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Testing
 
 ```bash
-# Run tests
+# Run all tests
 poetry run pytest
 
-# Run tests with coverage
-poetry run pytest --cov=api
+# Run auth tests specifically
+poetry run pytest tests/test_auth.py -v
+
+# Run with coverage
+poetry run pytest --cov=api tests/
 ```
+
+### API Endpoints
+
+#### Health Check
+```bash
+curl http://localhost:8000/ping
+```
+
+#### Authentication
+```bash
+# Test /me endpoint (requires valid JWT token)
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" http://localhost:8000/auth/me
+
+# Verify token
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" http://localhost:8000/auth/verify
+```
+
+#### Documentation
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+## Authentication
+
+This API uses **Supabase JWT tokens** for authentication. Protected endpoints require a valid JWT token in the `Authorization` header:
+
+```
+Authorization: Bearer <your-jwt-token>
+```
+
+### Getting a JWT Token
+
+Currently, the OAuth token exchange endpoint (`POST /auth/token`) is not fully implemented. For testing, you can:
+
+1. **Generate test tokens** using your Supabase JWT secret
+2. **Use Supabase client libraries** in your frontend to get tokens
+3. **Use Supabase Auth UI** for development
+
+### Supported Endpoints
+
+- `POST /auth/token` - OAuth code exchange (placeholder)
+- `GET /auth/me` - Get current user profile
+- `GET /auth/verify` - Verify token validity
 
 ## Project Structure
 
 ```
-ClipVault-PublicAPI/
-├── api/                    # Main application package
-│   ├── __init__.py
-│   ├── main.py            # FastAPI application
-│   ├── routes/            # API route handlers
-│   ├── services/          # Business logic services
-│   ├── schemas/           # Pydantic models
-│   └── middleware/        # Custom middleware
-├── tests/                 # Test suite
-├── docker/                # Docker configuration
-│   └── Dockerfile.dev     # Development Dockerfile
-├── docker-compose.yml     # Development environment
-├── pyproject.toml         # Poetry configuration
-└── README.md             # This file
+api/
+├── main.py           # FastAPI application
+├── routes/
+│   └── auth.py       # Authentication routes
+├── services/
+│   └── auth.py       # Authentication service & JWT validation
+└── schemas/
+    └── auth.py       # Pydantic models for auth
+
+tests/
+└── test_auth.py      # Authentication tests
 ```
 
-## Environment Variables
+## Task Status
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ENVIRONMENT` | Application environment | `development` |
-| `LOG_LEVEL` | Logging level | `info` |
-| `DATABASE_URL` | PostgreSQL connection string | - |
-| `REDIS_URL` | Redis connection string | - |
-| `SUPABASE_URL` | Supabase project URL | - |
-| `SUPABASE_KEY` | Supabase anon key | - |
+✅ **API-AUTH-003**: Supabase Auth middleware - COMPLETED
+- [x] JWKS fetching and caching
+- [x] JWT verification with PyJWT
+- [x] FastAPI dependency `get_current_user()`
+- [x] 401/403 exception handlers
+- [x] `/me` endpoint returning 401 without token
+- [x] Comprehensive test suite
 
-## Architecture
+## Next Steps
 
-The ClipVault Public API follows a clean architecture pattern:
+- **API-DB-004**: Supabase Postgres wrapper
+- **API-ROUTE-006**: `/auth/token` endpoint implementation
+- **API-ROUTE-008**: `/clips` POST endpoint
 
-- **FastAPI**: Modern, fast web framework for APIs
-- **Supabase**: Backend-as-a-Service for auth and database
-- **PostgreSQL**: Primary database with full-text search
-- **Redis**: Caching and session storage
-- **Cloud Pub/Sub**: Event-driven processing
-- **Cloud Run**: Serverless deployment platform
+## Docker Development
 
-## Contributing
+```bash
+# Build and run with docker-compose
+docker-compose up --build
 
-1. Install development dependencies: `poetry install`
-2. Run quality checks before committing
-3. Write tests for new features
-4. Update documentation as needed
+# API will be available at http://localhost:8000
+```
 
-## License
+## Production Deployment
 
-[License details to be added] 
+This API is designed for deployment on **Google Cloud Run**. See the `docker/` and infrastructure configuration for deployment details.
+
+---
+
+For more details, see the [LLD Public API](.context/LLD%20Public%20API.md) and [Task Breakdown](.context/Task%20Breakdown%20for%20Public%20API.md) documents. 
