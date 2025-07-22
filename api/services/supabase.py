@@ -2,6 +2,7 @@
 
 import os
 import asyncio
+import json
 from typing import Any, Dict, List, Optional, Union, AsyncContextManager
 from contextlib import asynccontextmanager
 import asyncpg
@@ -120,6 +121,23 @@ class SupabaseDB:
                     user_id=user_id
                 )
                 raise
+
+    @asynccontextmanager
+    async def _get_auth_connection(self) -> AsyncContextManager[asyncpg.Connection]:
+        """Get database connection with service role for auth schema access."""
+        pool = self._ensure_pool()
+        
+        async with pool.acquire() as conn:
+            try:
+                # Note: For auth.users access, we rely on the connection having 
+                # appropriate permissions through the service role configured 
+                # in the connection string
+                logger.debug("Acquired connection for auth schema access")
+                yield conn
+                
+            except Exception as e:
+                logger.error("Auth schema connection error", error=str(e))
+                raise
     
     async def fetch_one(
         self, 
@@ -227,25 +245,27 @@ class SupabaseDB:
         query: str, 
         args_list: List[tuple], 
         user_id: Optional[str] = None
-    ) -> None:
-        """Execute a query with multiple parameter sets (batch operation)."""
+    ) -> str:
+        """Execute a query multiple times with different arguments."""
         try:
             async with self._get_connection(user_id) as conn:
-                await conn.executemany(query, args_list)
+                status_result = await conn.executemany(query, args_list)
                 
                 logger.debug(
                     "Database execute_many completed",
                     query=query[:100],
-                    batch_size=len(args_list),
+                    batch_count=len(args_list),
+                    status=status_result,
                     user_id=user_id
                 )
+                
+                return status_result
                 
         except Exception as e:
             logger.error(
                 "Database execute_many failed",
                 error=str(e),
                 query=query[:100],
-                batch_size=len(args_list),
                 user_id=user_id
             )
             raise HTTPException(
@@ -284,6 +304,158 @@ class SupabaseDB:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Database query failed"
             )
+
+    # Auth-specific methods for accessing auth.users table
+    
+
+    
+    async def get_user_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get user profile from auth.users table.
+        
+        Args:
+            user_id: User UUID to fetch profile for
+            
+        Returns:
+            Dict containing user profile data or None if not found
+            
+        Raises:
+            HTTPException: If database query fails
+        """
+        try:
+            logger.debug(
+                "Starting user profile fetch",
+                user_id=user_id,
+                table="auth.users"
+            )
+            
+            async with self._get_auth_connection() as conn:
+                # Query all needed columns in one go based on actual Supabase schema
+                try:
+                    row = await conn.fetchrow(
+                        """
+                        SELECT id, email, 
+                               email_confirmed_at IS NOT NULL as email_verified,
+                               phone, 
+                               phone_confirmed_at IS NOT NULL as phone_verified,
+                               created_at, updated_at, last_sign_in_at,
+                               raw_user_meta_data, raw_app_meta_data,
+                               is_anonymous
+                        FROM auth.users 
+                        WHERE id = $1
+                        """,
+                        user_id
+                    )
+                    
+                    if not row:
+                        logger.warning(
+                            "User not found in auth.users table",
+                            user_id=user_id
+                        )
+                        return None
+                    
+                    result = dict(row)
+                    
+                    # Parse JSON fields if they're strings
+                    if result.get("raw_user_meta_data") and isinstance(result["raw_user_meta_data"], str):
+                        try:
+                            result["raw_user_meta_data"] = json.loads(result["raw_user_meta_data"])
+                        except json.JSONDecodeError:
+                            logger.warning("Failed to parse raw_user_meta_data as JSON", user_id=user_id)
+                            result["raw_user_meta_data"] = {}
+                    
+                    if result.get("raw_app_meta_data") and isinstance(result["raw_app_meta_data"], str):
+                        try:
+                            result["raw_app_meta_data"] = json.loads(result["raw_app_meta_data"])
+                        except json.JSONDecodeError:
+                            logger.warning("Failed to parse raw_app_meta_data as JSON", user_id=user_id)
+                            result["raw_app_meta_data"] = {}
+                    
+                    # Set user_metadata to raw_user_meta_data for compatibility with our UserProfile schema
+                    result["user_metadata"] = result.get("raw_user_meta_data", {})
+                    
+                    logger.debug(
+                        "User data fetched successfully",
+                        user_id=user_id,
+                        has_email=bool(result.get("email")),
+                        email_verified=result.get("email_verified"),
+                        has_raw_user_metadata=bool(result.get("raw_user_meta_data"))
+                    )
+                    
+                    # Convert UUID objects to strings for Pydantic compatibility
+                    if "id" in result and result["id"]:
+                        result["id"] = str(result["id"])
+                    
+                    logger.info(
+                        "User profile fetched successfully from auth.users",
+                        user_id=user_id,
+                        email=result.get("email"),
+                        has_metadata=bool(result.get("user_metadata"))
+                    )
+                    
+                    return result
+                    
+                except Exception as query_error:
+                    logger.error(
+                        "Failed to execute user profile query",
+                        error=str(query_error),
+                        user_id=user_id,
+                        query_type="unified_query"
+                    )
+                    raise
+                
+        except Exception as e:
+            logger.error(
+                "Failed to fetch user profile from auth.users",
+                error=str(e),
+                user_id=user_id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve user profile"
+            )
+    
+    async def update_user_metadata(
+        self, 
+        user_id: str, 
+        metadata: Dict[str, Any]
+    ) -> bool:
+        """
+        Update user metadata in auth.users table.
+        
+        Args:
+            user_id: User's UUID
+            metadata: Metadata dictionary to update
+            
+        Returns:
+            bool: True if update successful
+        """
+        try:
+            async with self._get_auth_connection() as conn:
+                await conn.execute(
+                    """
+                    UPDATE auth.users 
+                    SET raw_user_meta_data = raw_user_meta_data || $1::jsonb,
+                        updated_at = NOW()
+                    WHERE id = $2
+                    """,
+                    json.dumps(metadata),
+                    user_id
+                )
+                
+                logger.info(
+                    "User metadata updated successfully",
+                    user_id=user_id
+                )
+                
+                return True
+                
+        except Exception as e:
+            logger.error(
+                "Failed to update user metadata",
+                error=str(e),
+                user_id=user_id
+            )
+            return False
     
     async def health_check(self) -> Dict[str, Any]:
         """Check database health and connection pool status."""
@@ -312,16 +484,16 @@ class SupabaseDB:
             }
 
 
-# Global database service instance
-_database_service: Optional[SupabaseDB] = None
+# Global instance (lazy initialization)
+_db_instance: Optional[SupabaseDB] = None
 
 
 def get_database_service() -> SupabaseDB:
     """Get or create the global database service instance."""
-    global _database_service
-    if _database_service is None:
-        _database_service = SupabaseDB()
-    return _database_service
+    global _db_instance
+    if _db_instance is None:
+        _db_instance = SupabaseDB()
+    return _db_instance
 
 
 async def init_database_service() -> None:
@@ -338,9 +510,9 @@ async def init_database_service() -> None:
 
 async def shutdown_database_service() -> None:
     """Cleanup database service on app shutdown."""
-    global _database_service
-    if _database_service:
+    global _db_instance
+    if _db_instance:
         logger.info("Shutting down database service")
-        await _database_service.close()
-        _database_service = None
+        await _db_instance.close()
+        _db_instance = None
         logger.info("Database service shut down successfully") 
