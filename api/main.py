@@ -17,6 +17,7 @@ load_dotenv()
 # Import auth service and routes
 from api.services.auth import init_auth_service, shutdown_auth_service
 from api.services.supabase import init_database_service, shutdown_database_service
+from api.services.pubsub import init_pubsub_service, shutdown_pubsub_service
 from api.routes import auth
 
 # Configure structured logging for production
@@ -90,6 +91,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("Starting API without database - some features will be limited")
         # Continue startup - we can still serve auth and health endpoints
 
+    # Initialize Pub/Sub service
+    try:
+        await init_pubsub_service()
+        logger.info("Pub/Sub service initialized successfully")
+    except Exception as e:
+        logger.error("Failed to initialize Pub/Sub service", error=str(e))
+        logger.warning("Starting API without Pub/Sub - clip events will not be published")
+        # Continue startup - clip ingestion can work without events
+
     # TODO: Initialize database connections, Redis, etc.
     # Example:
     # try:
@@ -118,6 +128,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Database service shut down successfully")
     except Exception as e:
         logger.error("Error shutting down database service", error=str(e))
+    
+    # Cleanup Pub/Sub service
+    try:
+        await shutdown_pubsub_service()
+        logger.info("Pub/Sub service shut down successfully")
+    except Exception as e:
+        logger.error("Error shutting down Pub/Sub service", error=str(e))
     
     # TODO: Close database connections, Redis, etc.
     # await close_database()
@@ -198,20 +215,37 @@ async def health_check() -> HealthResponse:
 
 @app.get("/health", tags=["Health"])
 async def detailed_health_check():
-    """Detailed health check including database status."""
+    """Detailed health check including database and Pub/Sub status."""
     from api.services.database import get_database
+    from api.services.pubsub import get_pubsub_service
     
     try:
         db = await get_database()
         db_health = await db.health_check()
         
+        # Check Pub/Sub service health
+        try:
+            pubsub = get_pubsub_service()
+            pubsub_health = await pubsub.health_check()
+        except RuntimeError:
+            # Service not initialized
+            pubsub_health = {"status": "not_initialized", "error": "Service not initialized"}
+        except Exception as e:
+            pubsub_health = {"status": "unhealthy", "error": str(e)}
+        
+        # Overall health status
+        overall_status = "healthy"
+        if db_health.get("status") != "healthy" or pubsub_health.get("status") != "healthy":
+            overall_status = "degraded"
+        
         return {
-            "status": "healthy",
+            "status": overall_status,
             "environment": os.getenv("ENVIRONMENT", "development"),
             "version": "0.1.0",
             "services": {
                 "api": "healthy",
-                "database": db_health
+                "database": db_health,
+                "pubsub": pubsub_health
             }
         }
     except Exception as e:
@@ -222,7 +256,8 @@ async def detailed_health_check():
             "version": "0.1.0",
             "services": {
                 "api": "healthy",
-                "database": {"status": "unhealthy", "error": str(e)}
+                "database": {"status": "unhealthy", "error": str(e)},
+                "pubsub": {"status": "unknown", "error": "Could not check due to database error"}
             }
         }
 

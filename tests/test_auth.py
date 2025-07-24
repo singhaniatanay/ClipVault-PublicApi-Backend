@@ -2,7 +2,7 @@
 
 import json
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock, MagicMock, Mock
 from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from fastapi import HTTPException, status
@@ -77,11 +77,13 @@ def mock_user_data():
         "updated_at": datetime.now(timezone.utc),
         "last_sign_in_at": datetime.now(timezone.utc),
         "user_metadata": {
-            "display_name": "Test User",
+            "name": "Test User",  # Add name field that our implementation looks for
+            "full_name": "Test User Full",
             "avatar_url": "https://example.com/avatar.jpg",
             "preferences": {"theme": "dark"}
         },
         "raw_user_meta_data": {
+            "name": "Test User",  # This is what Supabase actually stores
             "full_name": "Test User Full",
             "picture": "https://google.com/avatar.jpg"
         },
@@ -95,8 +97,10 @@ class TestAuthService:
 
     def test_init_missing_env_vars(self):
         """Test AuthService initialization with missing environment variables."""
-        with pytest.raises(ValueError):
-            AuthService()
+        # Clear environment variables to trigger ValueError
+        with patch.dict('os.environ', {}, clear=True):
+            with pytest.raises(ValueError, match="Missing required Supabase environment variables"):
+                AuthService()
 
     def test_init_with_env_vars(self, auth_service):
         """Test AuthService initialization with environment variables."""
@@ -109,19 +113,22 @@ class TestAuthService:
         mock_jwks = {
             "keys": [
                 {
+                    "e": "AQAB",
+                    "kid": "test-key-id", 
                     "kty": "RSA",
-                    "kid": "test-key-id",
-                    "use": "sig",
                     "n": "test-n",
-                    "e": "AQAB"
+                    "use": "sig"
                 }
             ]
         }
         
         with patch('httpx.AsyncClient.get') as mock_get:
-            mock_response = AsyncMock()
+            # Use regular Mock for response (not AsyncMock) since .json() is synchronous in httpx
+            mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = mock_jwks
+            
+            # The get() method itself should be async
             mock_get.return_value = mock_response
             
             result = await auth_service.fetch_jwks()
@@ -136,7 +143,8 @@ class TestAuthService:
         mock_jwks = {"keys": []}
         
         with patch('httpx.AsyncClient.get') as mock_get:
-            mock_response = AsyncMock()
+            # Use regular Mock for response (not AsyncMock) since .json() is synchronous in httpx
+            mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = mock_jwks
             mock_get.return_value = mock_response
@@ -199,7 +207,8 @@ class TestOAuthTokenExchange:
         }
         
         with patch('httpx.AsyncClient.post') as mock_post:
-            mock_response = AsyncMock()
+            # Use regular Mock for response (not AsyncMock) since .json() is synchronous in httpx
+            mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = mock_token_response
             mock_post.return_value = mock_response
@@ -217,7 +226,8 @@ class TestOAuthTokenExchange:
     async def test_exchange_oauth_code_invalid_code(self, auth_service):
         """Test OAuth token exchange with invalid code."""
         with patch('httpx.AsyncClient.post') as mock_post:
-            mock_response = AsyncMock()
+            # Use regular Mock for response (not AsyncMock) since .json() is synchronous in httpx
+            mock_response = Mock()
             mock_response.status_code = 400
             mock_response.json.return_value = {"error": "invalid_grant"}
             mock_response.headers = {"content-type": "application/json"}
@@ -248,60 +258,92 @@ class TestAuthRoutes:
     @pytest.mark.asyncio
     async def test_me_endpoint_success(self, test_client, valid_jwt_token, mock_user_data):
         """Test successful /me endpoint with database integration."""
-        with patch('api.services.auth.get_auth_service') as mock_get_auth:
-            mock_auth_service = AsyncMock()
-            mock_auth_service.verify_jwt.return_value = {
-                "sub": "123e4567-e89b-12d3-a456-426614174000",
-                "email": "test@example.com",
-                "role": "authenticated"
-            }
-            mock_get_auth.return_value = mock_auth_service
+        from api.services.database import get_database
+        from api.services.auth import get_current_user
+        
+        # Create mock current user (what get_current_user should return)
+        mock_current_user = {
+            "sub": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "test@example.com",
+            "role": "authenticated",
+            "user_id": "123e4567-e89b-12d3-a456-426614174000"
+        }
+        
+        mock_db = AsyncMock()
+        mock_db.get_user_profile.return_value = mock_user_data
+        
+        # Make dependency overrides async to match the original function signatures
+        async def mock_get_current_user():
+            return mock_current_user
+        
+        async def mock_get_database():
+            return mock_db
+        
+        # Override FastAPI dependencies
+        test_client.app.dependency_overrides[get_database] = mock_get_database
+        test_client.app.dependency_overrides[get_current_user] = mock_get_current_user
+        
+        try:
+            response = test_client.get(
+                "/auth/me",
+                headers={"Authorization": f"Bearer {valid_jwt_token}"}
+            )
             
-            with patch('api.services.supabase.get_database_service') as mock_get_db:
-                mock_db = AsyncMock()
-                mock_db.get_user_profile.return_value = mock_user_data
-                mock_get_db.return_value = mock_db
-                
-                response = test_client.get(
-                    "/auth/me",
-                    headers={"Authorization": f"Bearer {valid_jwt_token}"}
-                )
-                
-                assert response.status_code == 200
-                data = response.json()
-                assert data["id"] == "123e4567-e89b-12d3-a456-426614174000"
-                assert data["email"] == "test@example.com"
-                assert data["display_name"] == "Test User"
-                assert data["email_verified"] is True
-                
-                # Verify database was queried
-                mock_db.get_user_profile.assert_called_once_with("123e4567-e89b-12d3-a456-426614174000")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["id"] == "123e4567-e89b-12d3-a456-426614174000"
+            assert data["email"] == "test@example.com"
+            assert data["display_name"] == "Test User"
+            assert data["email_verified"] is True
+            
+            # Verify database was queried
+            mock_db.get_user_profile.assert_called_once_with("123e4567-e89b-12d3-a456-426614174000")
+            
+        finally:
+            # Clean up dependency overrides
+            test_client.app.dependency_overrides.clear()
 
     @pytest.mark.asyncio
     async def test_me_endpoint_user_not_found(self, test_client, valid_jwt_token):
         """Test /me endpoint when user not found in database."""
-        with patch('api.services.auth.get_auth_service') as mock_get_auth:
-            mock_auth_service = AsyncMock()
-            mock_auth_service.verify_jwt.return_value = {
-                "sub": "123e4567-e89b-12d3-a456-426614174000",
-                "email": "test@example.com",
-                "role": "authenticated"
-            }
-            mock_get_auth.return_value = mock_auth_service
+        from api.services.database import get_database
+        from api.services.auth import get_current_user
+        
+        # Create mock current user (what get_current_user should return)
+        mock_current_user = {
+            "sub": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "test@example.com",
+            "role": "authenticated",
+            "user_id": "123e4567-e89b-12d3-a456-426614174000"
+        }
+        
+        mock_db = AsyncMock()
+        mock_db.get_user_profile.return_value = None  # User not found
+        
+        # Make dependency overrides async to match the original function signatures
+        async def mock_get_current_user():
+            return mock_current_user
+        
+        async def mock_get_database():
+            return mock_db
+        
+        # Override FastAPI dependencies
+        test_client.app.dependency_overrides[get_database] = mock_get_database
+        test_client.app.dependency_overrides[get_current_user] = mock_get_current_user
+        
+        try:
+            response = test_client.get(
+                "/auth/me",
+                headers={"Authorization": f"Bearer {valid_jwt_token}"}
+            )
             
-            with patch('api.services.supabase.get_database_service') as mock_get_db:
-                mock_db = AsyncMock()
-                mock_db.get_user_profile.return_value = None  # User not found
-                mock_get_db.return_value = mock_db
-                
-                response = test_client.get(
-                    "/auth/me",
-                    headers={"Authorization": f"Bearer {valid_jwt_token}"}
-                )
-                
-                assert response.status_code == 404
-                data = response.json()
-                assert "User profile not found" in data["detail"]
+            assert response.status_code == 404
+            data = response.json()
+            assert "User profile not found" in data["detail"]
+            
+        finally:
+            # Clean up dependency overrides
+            test_client.app.dependency_overrides.clear()
 
     @pytest.mark.asyncio
     async def test_me_endpoint_with_invalid_token(self, test_client):
@@ -351,21 +393,30 @@ class TestAuthRoutes:
     @pytest.mark.asyncio
     async def test_token_exchange_endpoint_success(self, test_client):
         """Test successful token exchange endpoint."""
+        from datetime import datetime, timezone
+        
         mock_token_response = {
             "access_token": "access-token-123",
             "refresh_token": "refresh-token-123",
             "user": {
                 "id": "user-123",
                 "email": "test@example.com",
+                "email_verified": True,
+                "phone": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "last_sign_in_at": datetime.now(timezone.utc).isoformat(),
                 "user_metadata": {
-                    "full_name": "Test User"
+                    "full_name": "Test User",
+                    "avatar_url": "https://example.com/avatar.jpg"
                 }
             },
             "expires_in": 3600,
             "token_type": "Bearer"
         }
         
-        with patch('api.services.auth.get_auth_service') as mock_get_auth:
+        # The route calls get_auth_service() directly, so we need to patch it
+        with patch('api.routes.auth.get_auth_service') as mock_get_auth:
             mock_auth_service = AsyncMock()
             mock_auth_service.exchange_oauth_code.return_value = mock_token_response
             mock_get_auth.return_value = mock_auth_service
@@ -395,7 +446,8 @@ class TestAuthRoutes:
     @pytest.mark.asyncio
     async def test_token_exchange_invalid_code(self, test_client):
         """Test token exchange with invalid authorization code.""" 
-        with patch('api.services.auth.get_auth_service') as mock_get_auth:
+        # The route calls get_auth_service() directly, so we need to patch it in the routes module
+        with patch('api.routes.auth.get_auth_service') as mock_get_auth:
             mock_auth_service = AsyncMock()
             mock_auth_service.exchange_oauth_code.side_effect = HTTPException(
                 status_code=401,
