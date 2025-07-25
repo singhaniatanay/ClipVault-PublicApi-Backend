@@ -19,6 +19,7 @@ from api.services.auth import init_auth_service, shutdown_auth_service
 from api.services.supabase import init_database_service, shutdown_database_service
 from api.services.pubsub import init_pubsub_service, shutdown_pubsub_service
 from api.routes import auth
+from api.routes.clips import router as clips_router
 
 # Configure structured logging for production
 def configure_logging():
@@ -165,6 +166,7 @@ app.add_middleware(
 
 # Register route modules
 app.include_router(auth.router)
+app.include_router(clips_router)
 
 
 @app.middleware("http")

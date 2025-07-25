@@ -1,6 +1,6 @@
 """Database service dependencies for FastAPI routes."""
 
-from typing import Optional
+from typing import Optional, Tuple
 from fastapi import Depends, HTTPException, status
 
 from api.services.supabase import get_database_service, SupabaseDB
@@ -37,3 +37,11 @@ async def get_database_with_optional_user(
         user_id = current_user.get("sub") or current_user.get("user_id")
     
     return db, user_id 
+
+async def upsert_clip(db: SupabaseDB, source_url: str) -> Tuple[str, bool]:
+    """Thin interface for upserting a clip, delegates to SupabaseDB."""
+    return await db.upsert_clip(source_url)
+
+async def link_user_clip(db: SupabaseDB, user_id: str, clip_id: str) -> bool:
+    """Thin interface for linking a user to a clip, delegates to SupabaseDB."""
+    return await db.link_user_clip(user_id, clip_id) 

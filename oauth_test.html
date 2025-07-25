@@ -165,6 +165,16 @@
             <button onclick="testVerifyEndpoint()" id="testVerifyBtn" disabled>✅ Test /auth/verify</button>
         </div>
 
+        <div class="step">
+            <h4>Step 4: Test /clips Endpoint</h4>
+            <form id="clipsForm" onsubmit="submitClip(event)">
+                <label for="clipUrl">Link to Save (supported domains only):</label>
+                <input type="url" id="clipUrl" name="clipUrl" placeholder="https://reddit.com/r/testpost" required style="width: 100%;">
+                <input type="hidden" id="mediaType" value="link">
+                <button type="submit" id="submitClipBtn" disabled>💾 Save Link to /clips</button>
+            </form>
+        </div>
+
         <div id="results"></div>
     </div>
 
@@ -178,7 +188,7 @@
         let currentSession = null;
 
         // Initialize page
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             // Auto-fill redirect URI with current page URL
             document.getElementById('redirectUri').value = window.location.href;
             
@@ -201,6 +211,12 @@
                 document.getElementById('supabaseUrl').value = storedUrl;
                 document.getElementById('supabaseAnonKey').value = storedKey;
                 initializeSupabase(storedUrl, storedKey);
+                // Fetch session and update state
+                if (window.supabase) {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    currentSession = session;
+                    updateClipsButtonState();
+                }
             }
             
             if (storedApiUrl) {
@@ -212,6 +228,8 @@
                     document.getElementById('customApiUrl').classList.remove('hidden');
                 }
             }
+            // Always update button state on load
+            updateClipsButtonState();
         });
 
         function getApiBaseUrl() {
@@ -265,6 +283,8 @@
                          
                          showResult('🚪 User signed out', 'info');
                      }
+                     // Always update button state after auth change
+                     updateClipsButtonState();
                  });
                 
                 showResult('✅ Supabase client initialized successfully', 'success');
@@ -603,12 +623,64 @@ ${JSON.stringify(result, null, 2)}`, 'error');
              document.getElementById('testTokenBtn').disabled = true;
              document.getElementById('testMeBtn').disabled = true;
              document.getElementById('testVerifyBtn').disabled = true;
-             
+
              // Clear URL parameters
              const url = new URL(window.location);
              url.search = '';
              window.history.replaceState({}, document.title, url);
          }
+
+        // Enable/disable /clips button based on auth
+        function updateClipsButtonState() {
+            const btn = document.getElementById('submitClipBtn');
+            btn.disabled = !currentSession;
+        }
+        // Also update on auth state change
+        if (window.supabase) {
+            window.supabase.auth?.onAuthStateChange?.((event, session) => {
+                updateClipsButtonState();
+            });
+        }
+        // Submit /clips form
+        async function submitClip(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+            const url = document.getElementById('clipUrl').value.trim();
+            const mediaType = document.getElementById('mediaType').value;
+            if (!url) {
+                showResult('❌ Please enter a link to save.', 'error');
+                return;
+            }
+            try {
+                showResult('🔄 Posting to /clips...', 'info');
+                const response = await fetch(`${apiBaseUrl}/clips`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ source_url: url, media_type: mediaType })
+                });
+                const result = await response.json();
+                if (response.status === 201) {
+                    showResult(`✅ /clips SUCCESS (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'success');
+                } else if (response.status === 409) {
+                    showResult(`⚠️ /clips duplicate (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'info');
+                } else {
+                    showResult(`❌ /clips failed (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error posting to /clips: ${error.message}`, 'error');
+            }
+        }
     </script>
 </body>
 </html> 

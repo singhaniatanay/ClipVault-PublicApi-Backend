@@ -483,6 +483,46 @@ class SupabaseDB:
                 "error": str(e)
             }
 
+    async def upsert_clip(self, source_url: str) -> tuple[str, bool]:
+        """
+        Insert a new clip if it doesn't exist, or return the existing one.
+        Returns (clip_id, is_new).
+        """
+        sql = """
+        INSERT INTO clips (source_url)
+        VALUES ($1)
+        ON CONFLICT (source_url) DO UPDATE SET source_url = EXCLUDED.source_url
+        RETURNING clip_id, (xmax = 0) AS is_new
+        """
+        try:
+            async with self._get_connection() as conn:
+                row = await conn.fetchrow(sql, source_url)
+                if not row or "clip_id" not in row:
+                    logger.error("Failed to upsert clip", source_url=source_url)
+                    raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to upsert clip")
+                return str(row["clip_id"]), bool(row["is_new"])
+        except Exception as e:
+            logger.error("DB error in upsert_clip", error=str(e), source_url=source_url)
+            raise
+
+    async def link_user_clip(self, user_id: str, clip_id: str) -> bool:
+        """
+        Link a user to a clip (user_clips table). Returns True if new, False if already linked.
+        """
+        sql = """
+        INSERT INTO user_clips (owner_uid, clip_id)
+        VALUES ($1, $2)
+        ON CONFLICT DO NOTHING
+        RETURNING owner_uid
+        """
+        try:
+            async with self._get_connection(user_id) as conn:
+                row = await conn.fetchrow(sql, user_id, clip_id)
+                return row is not None
+        except Exception as e:
+            logger.error("DB error in link_user_clip", error=str(e), user_id=user_id, clip_id=clip_id)
+            raise
+
 
 # Global instance (lazy initialization)
 _db_instance: Optional[SupabaseDB] = None
