@@ -3,7 +3,7 @@
 import os
 import asyncio
 import json
-from typing import Any, Dict, List, Optional, Union, AsyncContextManager
+from typing import Any, Dict, List, Optional
 from contextlib import asynccontextmanager
 import asyncpg
 import structlog
@@ -554,6 +554,113 @@ class SupabaseDB:
                 return result
         except Exception as e:
             logger.error("DB error in get_clip_with_tags_for_user", error=str(e), user_id=user_id, clip_id=clip_id)
+            raise
+
+    async def search_clips_for_user(
+        self, 
+        user_id: str, 
+        query: Optional[str] = None, 
+        tags: Optional[List[str]] = None,
+        page: int = 1,
+        limit: int = 40
+    ) -> tuple[List[Dict[str, Any]], int]:
+        """
+        Search clips for a user using FTS and tag filtering.
+        Returns (clips, total_count).
+        """
+        # Build the base query
+        base_sql = """
+        FROM clips c
+        JOIN user_clips uc ON uc.clip_id = c.clip_id
+        LEFT JOIN clip_tags ct ON ct.clip_id = c.clip_id
+        LEFT JOIN tags t ON t.tag_id = ct.tag_id
+        WHERE uc.owner_uid = $1
+        """
+        
+        # Add search conditions
+        conditions = []
+        params = [user_id]
+        param_count = 1
+        
+        # Add FTS search condition
+        if query:
+            conditions.append(
+                f"to_tsvector('english', coalesce(c.title,'') || ' ' || coalesce(c.description,'') || ' ' || coalesce(c.transcript,'') || ' ' || coalesce(c.summary,'')) @@ plainto_tsquery('english', ${param_count + 1})"
+            )
+            params.append(query)
+            param_count += 1
+        
+        # Add tag filtering condition
+        if tags:
+            conditions.append(
+                f"EXISTS (SELECT 1 FROM clip_tags ct2 JOIN tags t2 ON t2.tag_id = ct2.tag_id WHERE ct2.clip_id = c.clip_id AND t2.name = ANY(${param_count + 1}))"
+            )
+            params.append(tags)
+            param_count += 1
+        
+        if conditions:
+            base_sql += " AND " + " AND ".join(conditions)
+        
+        # Add grouping
+        base_sql += " GROUP BY c.clip_id, c.source_url, c.transcript, c.summary, c.created_at, uc.saved_at"
+        
+        # Count query
+        count_sql = f"SELECT COUNT(DISTINCT c.clip_id) {base_sql}"
+        
+        # Results query
+        results_sql = f"""
+        SELECT c.clip_id, c.source_url, c.title, c.description, c.transcript, c.summary, c.created_at,
+               uc.saved_at,
+               COALESCE(json_agg(json_build_object('tag_id', t.tag_id, 'name', t.name)) FILTER (WHERE t.tag_id IS NOT NULL), '[]') AS tags
+        {base_sql}
+        ORDER BY uc.saved_at DESC
+        LIMIT ${param_count + 1} OFFSET ${param_count + 2}
+        """
+        
+        # Add pagination parameters
+        params.extend([limit, (page - 1) * limit])
+        
+        try:
+            async with self._get_connection(user_id) as conn:
+                # Get total count
+                total_count = await conn.fetchval(count_sql, *params[:-2]) or 0  # Exclude limit/offset
+                
+                # Get results
+                rows = await conn.fetch(results_sql, *params)
+                
+                # Process results
+                clips = []
+                for row in rows:
+                    result = dict(row)
+                    # Convert UUID to string for clip_id
+                    if "clip_id" in result and result["clip_id"]:
+                        result["clip_id"] = str(result["clip_id"])
+                    # Parse tags JSON
+                    if isinstance(result.get('tags'), str):
+                        result['tags'] = json.loads(result['tags'])
+                    clips.append(result)
+                
+                logger.debug(
+                    "Search completed",
+                    user_id=user_id,
+                    query=query,
+                    tags=tags,
+                    page=page,
+                    limit=limit,
+                    total_count=total_count,
+                    result_count=len(clips)
+                )
+                
+                return clips, total_count
+                
+        except Exception as e:
+            logger.error(
+                "DB error in search_clips_for_user", 
+                error=str(e), 
+                user_id=user_id, 
+                query=query, 
+                tags=tags
+            )
             raise
 
 

@@ -1,6 +1,6 @@
 """Database service dependencies for FastAPI routes."""
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Dict, Any
 from fastapi import Depends, HTTPException, status
 
 from api.services.supabase import get_database_service, SupabaseDB
@@ -48,4 +48,15 @@ async def link_user_clip(db: SupabaseDB, user_id: str, clip_id: str) -> bool:
 
 async def get_clip_with_tags_for_user(db: SupabaseDB, user_id: str, clip_id: str):
     """Thin interface for fetching a clip with tags and saved_at for a user."""
-    return await db.get_clip_with_tags_for_user(user_id, clip_id) 
+    return await db.get_clip_with_tags_for_user(user_id, clip_id)
+
+async def search_clips_for_user(
+    db: SupabaseDB, 
+    user_id: str, 
+    query: Optional[str] = None, 
+    tags: Optional[List[str]] = None,
+    page: int = 1,
+    limit: int = 40
+) -> tuple[List[Dict[str, Any]], int]:
+    """Thin interface for searching clips for a user with FTS and tag filtering."""
+    return await db.search_clips_for_user(user_id, query, tags, page, limit) 
