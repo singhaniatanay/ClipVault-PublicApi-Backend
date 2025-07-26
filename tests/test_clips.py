@@ -88,4 +88,73 @@ async def test_create_clip_unauthenticated(valid_clip_request):
     app.dependency_overrides.clear()
     response = client.post("/clips", json=valid_clip_request)
     # Accept both 401 and 403 as valid unauthenticated responses
-    assert response.status_code in (401, 403) 
+    assert response.status_code in (401, 403)
+
+@pytest.mark.asyncio
+async def test_get_clip_by_id_success(valid_jwt):
+    mock_db = AsyncMock()
+    mock_clip = {
+        "clip_id": "19ee20b6-e47d-47a0-9b43-5eb59a187443",
+        "source_url": "https://reddit.com/r/testpost",
+        "transcript": "test transcript",
+        "summary": "test summary",
+        "created_at": "2024-07-25T12:00:00Z",
+        "updated_at": "2024-07-25T12:10:00Z",
+        "saved_at": "2024-07-25T12:15:00Z",
+        "tags": [
+            {"tag_id": "tag-1", "name": "news"},
+            {"tag_id": "tag-2", "name": "reddit"}
+        ]
+    }
+    mock_db.get_clip_with_tags_for_user.return_value = mock_clip
+    async def mock_get_current_user():
+        return {"sub": "user-uuid"}
+    async def mock_get_database_service():
+        return mock_db
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+    app.dependency_overrides[get_database_service] = mock_get_database_service
+    try:
+        response = client.get("/clips/19ee20b6-e47d-47a0-9b43-5eb59a187443", headers={"Authorization": f"Bearer {valid_jwt}"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["clip"]["clip_id"] == "19ee20b6-e47d-47a0-9b43-5eb59a187443"
+        assert data["clip"]["source_url"] == "https://reddit.com/r/testpost"
+        assert data["tags"] == mock_clip["tags"]
+        assert data["saved_at"] == mock_clip["saved_at"]
+    finally:
+        app.dependency_overrides.clear()
+
+@pytest.mark.asyncio
+async def test_get_clip_by_id_not_found(valid_jwt):
+    mock_db = AsyncMock()
+    mock_db.get_clip_with_tags_for_user.return_value = None
+    async def mock_get_current_user():
+        return {"sub": "user-uuid"}
+    async def mock_get_database_service():
+        return mock_db
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+    app.dependency_overrides[get_database_service] = mock_get_database_service
+    try:
+        response = client.get("/clips/00000000-0000-0000-0000-000000000000", headers={"Authorization": f"Bearer {valid_jwt}"})
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+@pytest.mark.asyncio
+async def test_get_clip_by_id_unauthenticated():
+    app.dependency_overrides.clear()
+    response = client.get("/clips/19ee20b6-e47d-47a0-9b43-5eb59a187443")
+    assert response.status_code in (401, 403)
+
+@pytest.mark.asyncio
+async def test_get_clip_by_id_invalid_uuid(valid_jwt):
+    async def mock_get_current_user():
+        return {"sub": "user-uuid"}
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+    try:
+        response = client.get("/clips/invalid-uuid-format", headers={"Authorization": f"Bearer {valid_jwt}"})
+        assert response.status_code == 400
+        data = response.json()
+        assert "Invalid clip ID format" in data["detail"]
+    finally:
+        app.dependency_overrides.clear() 

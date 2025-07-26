@@ -45,3 +45,7 @@ async def upsert_clip(db: SupabaseDB, source_url: str) -> Tuple[str, bool]:
 async def link_user_clip(db: SupabaseDB, user_id: str, clip_id: str) -> bool:
     """Thin interface for linking a user to a clip, delegates to SupabaseDB."""
     return await db.link_user_clip(user_id, clip_id) 
+
+async def get_clip_with_tags_for_user(db: SupabaseDB, user_id: str, clip_id: str):
+    """Thin interface for fetching a clip with tags and saved_at for a user."""
+    return await db.get_clip_with_tags_for_user(user_id, clip_id) 

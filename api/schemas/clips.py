@@ -1,6 +1,7 @@
 from pydantic import BaseModel, HttpUrl, Field, field_validator
 from typing import Literal, Optional, List
 import re
+from datetime import datetime
 
 # Supported domains for MVP (can be expanded)
 SUPPORTED_DOMAINS = [
@@ -218,4 +219,22 @@ class ClipCreateResponse(BaseModel):
 
 class ClipDuplicateResponse(BaseModel):
     detail: str = Field("Link already saved by user", description="Duplicate link error message.")
-    clip_id: str 
+    clip_id: str
+
+class TagModel(BaseModel):
+    tag_id: str
+    name: str
+
+class ClipModel(BaseModel):
+    clip_id: str
+    source_url: HttpUrl
+    transcript: Optional[str] = None
+    summary: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    # Add more fields as needed from the clips table
+
+class ClipDetailResponse(BaseModel):
+    clip: ClipModel
+    tags: List[TagModel]
+    saved_at: datetime 

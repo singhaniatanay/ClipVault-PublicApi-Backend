@@ -11,15 +11,16 @@
 - **API-ROUTE-007**: `/me` endpoint, returns authenticated user profile from Supabase
 - **API-PUB-013**: Pub/Sub publisher module, DLQ, event emission for `clip.created`
 - **API-ROUTE-008**: `/clips` POST endpoint for link ingest, deduplication, and event publishing (idempotent, supports Supabase Auth, Pub/Sub integration)
-- **Testing**: All core business logic, database, and eventing tests pass (unit, integration, and manual HTML for /clips)
+- **API-ROUTE-009**: `/clips/{id}` GET endpoint for fetching clip details with tags and saved_at timestamp
+- **Testing**: All core business logic, database, and eventing tests pass (unit, integration, and manual HTML for /clips and /clips/{id})
 
 ## 🟢 Current Status
 
-- **Core API**: Auth, DB, Pub/Sub, user profile, and /clips endpoints are fully functional and tested
+- **Core API**: Auth, DB, Pub/Sub, user profile, /clips POST, and /clips/{id} GET endpoints are fully functional and tested
 - **Test Coverage**: All tests pass except for one edge-case route (known FastAPI/Starlette test client quirk, not a functional bug)
 - **Infrastructure**: Cloud Run, Pub/Sub, and Supabase integration complete
 - **Observability**: Structured logging, health checks in place
-- **Manual Testing**: OAuth HTML test page supports end-to-end /clips testing
+- **Manual Testing**: OAuth HTML test page supports end-to-end /clips and /clips/{id} testing
 
 ## ❗ Remaining Issues
 

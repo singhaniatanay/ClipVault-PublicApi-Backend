@@ -301,7 +301,11 @@ async def internal_server_error(request: Request, exc: Exception):
         method=request.method,
         exc_info=True
     )
-    return {"error": "Internal server error", "status_code": 500}
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal server error", "status_code": 500}
+    )
 
 
 @app.exception_handler(404)
@@ -312,7 +316,11 @@ async def not_found_error(request: Request, exc: Exception):
         url=str(request.url),
         method=request.method,
     )
-    return {"error": "Endpoint not found", "status_code": 404}
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=404,
+        content={"error": "Endpoint not found", "status_code": 404}
+    )
 
 
 if __name__ == "__main__":

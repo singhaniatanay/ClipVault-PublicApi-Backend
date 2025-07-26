@@ -523,6 +523,39 @@ class SupabaseDB:
             logger.error("DB error in link_user_clip", error=str(e), user_id=user_id, clip_id=clip_id)
             raise
 
+    async def get_clip_with_tags_for_user(self, user_id: str, clip_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch a clip by ID for a user, including tags and saved_at.
+        Returns None if not found or not accessible.
+        """
+        sql = """
+        SELECT c.clip_id, c.source_url, c.transcript, c.summary, c.created_at, c.updated_at,
+               uc.saved_at,
+               COALESCE(json_agg(json_build_object('tag_id', t.tag_id, 'name', t.name)) FILTER (WHERE t.tag_id IS NOT NULL), '[]') AS tags
+        FROM clips c
+        JOIN user_clips uc ON uc.clip_id = c.clip_id
+        LEFT JOIN clip_tags ct ON ct.clip_id = c.clip_id
+        LEFT JOIN tags t ON t.tag_id = ct.tag_id
+        WHERE c.clip_id = $1 AND uc.owner_uid = $2
+        GROUP BY c.clip_id, c.source_url, c.transcript, c.summary, c.created_at, c.updated_at, uc.saved_at
+        """
+        try:
+            async with self._get_connection(user_id) as conn:
+                row = await conn.fetchrow(sql, clip_id, user_id)
+                if not row:
+                    return None
+                result = dict(row)
+                # Convert UUID to string for clip_id
+                if "clip_id" in result and result["clip_id"]:
+                    result["clip_id"] = str(result["clip_id"])
+                # Parse tags JSON
+                if isinstance(result.get('tags'), str):
+                    result['tags'] = json.loads(result['tags'])
+                return result
+        except Exception as e:
+            logger.error("DB error in get_clip_with_tags_for_user", error=str(e), user_id=user_id, clip_id=clip_id)
+            raise
+
 
 # Global instance (lazy initialization)
 _db_instance: Optional[SupabaseDB] = None

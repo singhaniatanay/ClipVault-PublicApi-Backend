@@ -21,13 +21,15 @@
 - **All infrastructure (DB, Pub/Sub, Cloud Run) is set up and integrated**
 - **All business logic and edge cases are now covered by tests**
 - **/clips POST endpoint (API-ROUTE-008) is fully implemented, tested (unit, integration, and manual via HTML), and integrated with Supabase Auth and Pub/Sub**
-- **OAuth HTML test page supports end-to-end /clips testing**
+- **/clips/{id} GET endpoint (API-ROUTE-009) is fully implemented, tested, and supports fetching clip details with tags and saved_at**
+- **OAuth HTML test page supports end-to-end /clips and /clips/{id} testing**
 - **User feedback and requirements are incorporated in real time**
 
 ## 📚 Reference Files
 - `.context/Task Breakdown for Public API.md` (task list)
 - `.context/LLD Public API.md` (low-level design)
 - `api/services/supabase.py`, `api/services/pubsub.py`, `api/routes/auth.py`, `api/routes/clips.py` (core logic)
+- `api/schemas/clips.py` (Pydantic models for clip operations)
 - `tests/` (comprehensive test suite)
 - `oauth_test.html` (manual end-to-end test page)
 

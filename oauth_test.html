@@ -175,6 +175,15 @@
             </form>
         </div>
 
+        <div class="step">
+            <h4>Step 5: Fetch Clip by ID (/clips/{id})</h4>
+            <form id="getClipForm" onsubmit="fetchClipById(event)">
+                <label for="clipId">Clip ID:</label>
+                <input type="text" id="clipId" name="clipId" placeholder="clip-uuid" required style="width: 100%;">
+                <button type="submit" id="fetchClipBtn" disabled>🔍 Fetch Clip</button>
+            </form>
+        </div>
+
         <div id="results"></div>
     </div>
 
@@ -630,10 +639,12 @@ ${JSON.stringify(result, null, 2)}`, 'error');
              window.history.replaceState({}, document.title, url);
          }
 
-        // Enable/disable /clips button based on auth
+        // Enable/disable /clips and fetch-clip buttons based on auth
         function updateClipsButtonState() {
             const btn = document.getElementById('submitClipBtn');
             btn.disabled = !currentSession;
+            const fetchBtn = document.getElementById('fetchClipBtn');
+            if (fetchBtn) fetchBtn.disabled = !currentSession;
         }
         // Also update on auth state change
         if (window.supabase) {
@@ -679,6 +690,45 @@ ${JSON.stringify(result, null, 2)}`, 'error');
                 }
             } catch (error) {
                 showResult(`❌ Error posting to /clips: ${error.message}`, 'error');
+            }
+        }
+
+        // Fetch /clips/{id} form
+        async function fetchClipById(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+            const clipId = document.getElementById('clipId').value.trim();
+            if (!clipId) {
+                showResult('❌ Please enter a clip ID.', 'error');
+                return;
+            }
+            try {
+                showResult(`🔄 Fetching /clips/${clipId}...`, 'info');
+                const response = await fetch(`${apiBaseUrl}/clips/${clipId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const result = await response.json();
+                if (response.status === 200) {
+                    showResult(`✅ /clips/${clipId} SUCCESS (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'success');
+                } else if (response.status === 404) {
+                    showResult(`❌ /clips/${clipId} not found (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                } else {
+                    showResult(`❌ /clips/${clipId} failed (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error fetching /clips/${clipId}: ${error.message}`, 'error');
             }
         }
     </script>
