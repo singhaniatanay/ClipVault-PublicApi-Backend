@@ -4,9 +4,14 @@
 BEGIN;
 
 -- Full-text search index on clips (as specified in LLD)
--- This enables fast keyword search across transcript and summary
+-- This enables fast keyword search across transcript, summary, title, and description
 CREATE INDEX clips_fts_idx ON clips USING gin (
-    to_tsvector('english', coalesce(transcript, '') || ' ' || coalesce(summary, ''))
+    to_tsvector('english', 
+        coalesce(title, '') || ' ' || 
+        coalesce(description, '') || ' ' || 
+        coalesce(transcript, '') || ' ' || 
+        coalesce(summary, '')
+    )
 );
 
 -- Performance index for user clips (as specified in LLD)
