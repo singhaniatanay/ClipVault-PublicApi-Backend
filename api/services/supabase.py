@@ -98,7 +98,7 @@ class SupabaseDB:
         return self.pool
     
     @asynccontextmanager
-    async def _get_connection(self, user_id: Optional[str] = None) -> AsyncContextManager[asyncpg.Connection]:
+    async def _get_connection(self, user_id: Optional[str] = None):
         """Get database connection with optional RLS user context."""
         pool = self._ensure_pool()
         
@@ -123,7 +123,7 @@ class SupabaseDB:
                 raise
 
     @asynccontextmanager
-    async def _get_auth_connection(self) -> AsyncContextManager[asyncpg.Connection]:
+    async def _get_auth_connection(self):
         """Get database connection with service role for auth schema access."""
         pool = self._ensure_pool()
         
