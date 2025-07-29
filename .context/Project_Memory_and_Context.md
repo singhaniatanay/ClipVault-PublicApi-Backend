@@ -23,15 +23,16 @@
 - **/clips POST endpoint (API-ROUTE-008) is fully implemented, tested (unit, integration, and manual via HTML), and integrated with Supabase Auth and Pub/Sub**
 - **/clips/{id} GET endpoint (API-ROUTE-009) is fully implemented, tested, and supports fetching clip details with tags and saved_at**
 - **/search GET endpoint (API-ROUTE-010) is fully implemented, tested, and supports keyword search via FTS and tag filtering with pagination**
-- **OAuth HTML test page supports end-to-end /clips, /clips/{id}, and /search testing**
+- **Collections CRUD endpoints (API-ROUTE-011) are fully implemented, tested, and support managing user collections and clip membership**
+- **OAuth HTML test page supports end-to-end /clips, /clips/{id}, /search, and collections testing**
 - **User feedback and requirements are incorporated in real time**
 
 ## 📚 Reference Files
 - `.context/Task Breakdown for Public API.md` (task list)
 - `.context/LLD Public API.md` (low-level design)
-- `api/services/supabase.py`, `api/services/pubsub.py`, `api/routes/auth.py`, `api/routes/clips.py`, `api/routes/search.py` (core logic)
+- `api/services/supabase.py`, `api/services/pubsub.py`, `api/routes/auth.py`, `api/routes/clips.py`, `api/routes/search.py`, `api/routes/collections.py` (core logic)
 - `tests/` (comprehensive test suite)
-- `api/schemas/clips.py`, `api/schemas/search.py` (Pydantic models for operations)
+- `api/schemas/clips.py`, `api/schemas/search.py`, `api/schemas/collections.py` (Pydantic models for operations)
 - `oauth_test.html` (manual end-to-end test page)
 
 ---

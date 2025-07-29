@@ -199,6 +199,88 @@
             </form>
         </div>
 
+        <div class="step">
+            <h4>Step 7: Collections Management (/collections)</h4>
+            
+            <h5>Create Collection</h5>
+            <form id="createCollectionForm" onsubmit="createCollection(event)">
+                <label for="collectionName">Collection Name:</label>
+                <input type="text" id="collectionName" name="collectionName" placeholder="My Collection" required style="width: 100%;">
+                <label for="collectionDescription">Description (optional):</label>
+                <input type="text" id="collectionDescription" name="collectionDescription" placeholder="A collection of interesting clips" style="width: 100%;">
+                <label for="collectionPublic">Public Collection:</label>
+                <select id="collectionPublic" name="collectionPublic" style="width: 100%;">
+                    <option value="false">Private</option>
+                    <option value="true">Public</option>
+                </select>
+                <label for="collectionColor">Color (optional):</label>
+                <input type="color" id="collectionColor" name="collectionColor" value="#6B7280" style="width: 100%;">
+                <button type="submit" id="createCollectionBtn" disabled>📁 Create Collection</button>
+            </form>
+
+            <h5>List Collections</h5>
+            <form id="listCollectionsForm" onsubmit="listCollections(event)">
+                <label for="collectionsPage">Page (optional):</label>
+                <input type="number" id="collectionsPage" name="collectionsPage" value="1" min="1" style="width: 100%;">
+                <label for="collectionsLimit">Limit (optional, max 100):</label>
+                <input type="number" id="collectionsLimit" name="collectionsLimit" value="20" min="1" max="100" style="width: 100%;">
+                <label for="includeClipsCount">Include Clips Count:</label>
+                <select id="includeClipsCount" name="includeClipsCount" style="width: 100%;">
+                    <option value="false">No</option>
+                    <option value="true">Yes</option>
+                </select>
+                <button type="submit" id="listCollectionsBtn" disabled>📋 List Collections</button>
+            </form>
+
+            <h5>Get Collection Details</h5>
+            <form id="getCollectionForm" onsubmit="getCollection(event)">
+                <label for="collectionId">Collection ID:</label>
+                <input type="text" id="collectionId" name="collectionId" placeholder="collection-uuid" required style="width: 100%;">
+                <label for="includeClips">Include Clips:</label>
+                <select id="includeClips" name="includeClips" style="width: 100%;">
+                    <option value="false">No</option>
+                    <option value="true">Yes</option>
+                </select>
+                <button type="submit" id="getCollectionBtn" disabled>🔍 Get Collection</button>
+            </form>
+
+            <h5>Update Collection</h5>
+            <form id="updateCollectionForm" onsubmit="updateCollection(event)">
+                <label for="updateCollectionId">Collection ID:</label>
+                <input type="text" id="updateCollectionId" name="updateCollectionId" placeholder="collection-uuid" required style="width: 100%;">
+                <label for="updateCollectionName">New Name (optional):</label>
+                <input type="text" id="updateCollectionName" name="updateCollectionName" placeholder="Updated Collection Name" style="width: 100%;">
+                <label for="updateCollectionDescription">New Description (optional):</label>
+                <input type="text" id="updateCollectionDescription" name="updateCollectionDescription" placeholder="Updated description" style="width: 100%;">
+                <button type="submit" id="updateCollectionBtn" disabled>✏️ Update Collection</button>
+            </form>
+
+            <h5>Add Clip to Collection</h5>
+            <form id="addClipToCollectionForm" onsubmit="addClipToCollection(event)">
+                <label for="addClipCollectionId">Collection ID:</label>
+                <input type="text" id="addClipCollectionId" name="addClipCollectionId" placeholder="collection-uuid" required style="width: 100%;">
+                <label for="addClipId">Clip ID:</label>
+                <input type="text" id="addClipId" name="addClipId" placeholder="clip-uuid" required style="width: 100%;">
+                <button type="submit" id="addClipToCollectionBtn" disabled>➕ Add Clip to Collection</button>
+            </form>
+
+            <h5>Remove Clip from Collection</h5>
+            <form id="removeClipFromCollectionForm" onsubmit="removeClipFromCollection(event)">
+                <label for="removeClipCollectionId">Collection ID:</label>
+                <input type="text" id="removeClipCollectionId" name="removeClipCollectionId" placeholder="collection-uuid" required style="width: 100%;">
+                <label for="removeClipId">Clip ID:</label>
+                <input type="text" id="removeClipId" name="removeClipId" placeholder="clip-uuid" required style="width: 100%;">
+                <button type="submit" id="removeClipFromCollectionBtn" disabled>➖ Remove Clip from Collection</button>
+            </form>
+
+            <h5>Delete Collection</h5>
+            <form id="deleteCollectionForm" onsubmit="deleteCollection(event)">
+                <label for="deleteCollectionId">Collection ID:</label>
+                <input type="text" id="deleteCollectionId" name="deleteCollectionId" placeholder="collection-uuid" required style="width: 100%;">
+                <button type="submit" id="deleteCollectionBtn" disabled>🗑️ Delete Collection</button>
+            </form>
+        </div>
+
         <div id="results"></div>
     </div>
 
@@ -662,6 +744,22 @@ ${JSON.stringify(result, null, 2)}`, 'error');
             if (fetchBtn) fetchBtn.disabled = !currentSession;
             const searchBtn = document.getElementById('searchBtn');
             if (searchBtn) searchBtn.disabled = !currentSession;
+            
+            // Collections buttons
+            const createCollectionBtn = document.getElementById('createCollectionBtn');
+            if (createCollectionBtn) createCollectionBtn.disabled = !currentSession;
+            const listCollectionsBtn = document.getElementById('listCollectionsBtn');
+            if (listCollectionsBtn) listCollectionsBtn.disabled = !currentSession;
+            const getCollectionBtn = document.getElementById('getCollectionBtn');
+            if (getCollectionBtn) getCollectionBtn.disabled = !currentSession;
+            const updateCollectionBtn = document.getElementById('updateCollectionBtn');
+            if (updateCollectionBtn) updateCollectionBtn.disabled = !currentSession;
+            const addClipToCollectionBtn = document.getElementById('addClipToCollectionBtn');
+            if (addClipToCollectionBtn) addClipToCollectionBtn.disabled = !currentSession;
+            const removeClipFromCollectionBtn = document.getElementById('removeClipFromCollectionBtn');
+            if (removeClipFromCollectionBtn) removeClipFromCollectionBtn.disabled = !currentSession;
+            const deleteCollectionBtn = document.getElementById('deleteCollectionBtn');
+            if (deleteCollectionBtn) deleteCollectionBtn.disabled = !currentSession;
         }
         // Also update on auth state change
         if (window.supabase) {
@@ -790,6 +888,319 @@ ${JSON.stringify(result, null, 2)}`, 'error');
                 }
             } catch (error) {
                 showResult(`❌ Error searching clips: ${error.message}`, 'error');
+            }
+        }
+
+        // ============================================================================
+        // Collections Functions
+        // ============================================================================
+
+        async function createCollection(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+
+            const name = document.getElementById('collectionName').value.trim();
+            const description = document.getElementById('collectionDescription').value.trim();
+            const isPublic = document.getElementById('collectionPublic').value === 'true';
+            const colorHex = document.getElementById('collectionColor').value;
+
+            if (!name) {
+                showResult('❌ Please enter a collection name.', 'error');
+                return;
+            }
+
+            try {
+                showResult('🔄 Creating collection...', 'info');
+                const response = await fetch(`${apiBaseUrl}/collections/`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        description: description || undefined,
+                        is_public: isPublic,
+                        color_hex: colorHex
+                    })
+                });
+                const result = await response.json();
+                if (response.status === 201) {
+                    showResult(`✅ Collection created (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'success');
+                } else {
+                    showResult(`❌ Failed to create collection (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error creating collection: ${error.message}`, 'error');
+            }
+        }
+
+        async function listCollections(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+
+            const page = document.getElementById('collectionsPage').value;
+            const limit = document.getElementById('collectionsLimit').value;
+            const includeClipsCount = document.getElementById('includeClipsCount').value === 'true';
+
+            const params = new URLSearchParams({
+                page: page,
+                limit: limit,
+                include_clips_count: includeClipsCount
+            });
+
+            try {
+                showResult('🔄 Listing collections...', 'info');
+                const response = await fetch(`${apiBaseUrl}/collections/?${params.toString()}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showResult(`✅ Collections listed (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'success');
+                } else {
+                    showResult(`❌ Failed to list collections (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error listing collections: ${error.message}`, 'error');
+            }
+        }
+
+        async function getCollection(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+
+            const collectionId = document.getElementById('collectionId').value.trim();
+            const includeClips = document.getElementById('includeClips').value === 'true';
+
+            if (!collectionId) {
+                showResult('❌ Please enter a collection ID.', 'error');
+                return;
+            }
+
+            const params = new URLSearchParams({
+                include_clips: includeClips
+            });
+
+            try {
+                showResult(`🔄 Getting collection ${collectionId}...`, 'info');
+                const response = await fetch(`${apiBaseUrl}/collections/${collectionId}?${params.toString()}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const result = await response.json();
+                if (response.status === 200) {
+                    showResult(`✅ Collection retrieved (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'success');
+                } else if (response.status === 404) {
+                    showResult(`❌ Collection not found (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                } else {
+                    showResult(`❌ Failed to get collection (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error getting collection: ${error.message}`, 'error');
+            }
+        }
+
+        async function updateCollection(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+
+            const collectionId = document.getElementById('updateCollectionId').value.trim();
+            const name = document.getElementById('updateCollectionName').value.trim();
+            const description = document.getElementById('updateCollectionDescription').value.trim();
+
+            if (!collectionId) {
+                showResult('❌ Please enter a collection ID.', 'error');
+                return;
+            }
+
+            const updateData = {};
+            if (name) updateData.name = name;
+            if (description) updateData.description = description;
+
+            if (Object.keys(updateData).length === 0) {
+                showResult('❌ Please provide at least one field to update.', 'error');
+                return;
+            }
+
+            try {
+                showResult(`🔄 Updating collection ${collectionId}...`, 'info');
+                const response = await fetch(`${apiBaseUrl}/collections/${collectionId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(updateData)
+                });
+                const result = await response.json();
+                if (response.status === 200) {
+                    showResult(`✅ Collection updated (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'success');
+                } else if (response.status === 404) {
+                    showResult(`❌ Collection not found (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                } else {
+                    showResult(`❌ Failed to update collection (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error updating collection: ${error.message}`, 'error');
+            }
+        }
+
+        async function addClipToCollection(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+
+            const collectionId = document.getElementById('addClipCollectionId').value.trim();
+            const clipId = document.getElementById('addClipId').value.trim();
+
+            if (!collectionId || !clipId) {
+                showResult('❌ Please enter both collection ID and clip ID.', 'error');
+                return;
+            }
+
+            try {
+                showResult(`🔄 Adding clip ${clipId} to collection ${collectionId}...`, 'info');
+                const response = await fetch(`${apiBaseUrl}/collections/${collectionId}/clips`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ clip_id: clipId })
+                });
+                if (response.status === 204) {
+                    showResult(`✅ Clip added to collection (${response.status})`, 'success');
+                } else {
+                    const result = await response.json();
+                    showResult(`❌ Failed to add clip to collection (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error adding clip to collection: ${error.message}`, 'error');
+            }
+        }
+
+        async function removeClipFromCollection(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+
+            const collectionId = document.getElementById('removeClipCollectionId').value.trim();
+            const clipId = document.getElementById('removeClipId').value.trim();
+
+            if (!collectionId || !clipId) {
+                showResult('❌ Please enter both collection ID and clip ID.', 'error');
+                return;
+            }
+
+            try {
+                showResult(`🔄 Removing clip ${clipId} from collection ${collectionId}...`, 'info');
+                const response = await fetch(`${apiBaseUrl}/collections/${collectionId}/clips/${clipId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (response.status === 204) {
+                    showResult(`✅ Clip removed from collection (${response.status})`, 'success');
+                } else {
+                    const result = await response.json();
+                    showResult(`❌ Failed to remove clip from collection (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error removing clip from collection: ${error.message}`, 'error');
+            }
+        }
+
+        async function deleteCollection(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+
+            const collectionId = document.getElementById('deleteCollectionId').value.trim();
+
+            if (!collectionId) {
+                showResult('❌ Please enter a collection ID.', 'error');
+                return;
+            }
+
+            try {
+                showResult(`🔄 Deleting collection ${collectionId}...`, 'info');
+                const response = await fetch(`${apiBaseUrl}/collections/${collectionId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (response.status === 204) {
+                    showResult(`✅ Collection deleted (${response.status})`, 'success');
+                } else {
+                    const result = await response.json();
+                    showResult(`❌ Failed to delete collection (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error deleting collection: ${error.message}`, 'error');
             }
         }
     </script>

@@ -663,6 +663,407 @@ class SupabaseDB:
             )
             raise
 
+    # ============================================================================
+    # Collections Methods
+    # ============================================================================
+
+    async def create_collection(
+        self, 
+        user_id: str, 
+        name: str, 
+        description: Optional[str] = None,
+        is_smart: bool = False,
+        rule_json: Optional[Dict[str, Any]] = None,
+        is_public: bool = False,
+        color_hex: Optional[str] = None
+    ) -> str:
+        """Create a new collection for a user."""
+        try:
+            async with self._get_connection(user_id) as conn:
+                # Check if collection name already exists for this user
+                existing = await conn.fetchval(
+                    "SELECT coll_id FROM collections WHERE owner_uid = $1 AND name = $2",
+                    user_id, name
+                )
+                if existing:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Collection with name '{name}' already exists"
+                    )
+                
+                # Insert new collection
+                coll_id = await conn.fetchval("""
+                    INSERT INTO collections (owner_uid, name, description, is_smart, rule_json, is_public, color_hex)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    RETURNING coll_id
+                """, user_id, name, description, is_smart, rule_json, is_public, color_hex)
+                
+                logger.info("Collection created", user_id=user_id, coll_id=str(coll_id), name=name)
+                return str(coll_id)
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("DB error in create_collection", error=str(e), user_id=user_id, name=name)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create collection"
+            )
+
+    async def get_user_collections(
+        self, 
+        user_id: str, 
+        page: int = 1, 
+        limit: int = 20,
+        include_clips_count: bool = False
+    ) -> tuple[List[Dict[str, Any]], int]:
+        """Get all collections owned by a user with optional pagination."""
+        try:
+            async with self._get_connection(user_id) as conn:
+                # Base query
+                base_sql = "FROM collections WHERE owner_uid = $1"
+                params = [user_id]
+                
+                # Count query
+                count_sql = f"SELECT COUNT(*) {base_sql}"
+                total_count = await conn.fetchval(count_sql, *params)
+                
+                # Results query
+                select_fields = """
+                    coll_id, name, description, is_smart, rule_json, is_public, 
+                    color_hex, sort_order, created_at, updated_at
+                """
+                
+                if include_clips_count:
+                    select_fields += """,
+                    (SELECT COUNT(*) FROM collections_clips cc WHERE cc.coll_id = collections.coll_id) as clips_count
+                    """
+                
+                results_sql = f"""
+                    SELECT {select_fields}
+                    {base_sql}
+                    ORDER BY sort_order ASC, created_at DESC
+                    LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
+                """
+                params.extend([limit, (page - 1) * limit])
+                
+                rows = await conn.fetch(results_sql, *params)
+                
+                # Process results
+                collections = []
+                for row in rows:
+                    result = dict(row)
+                    # Convert UUID to string
+                    if "coll_id" in result and result["coll_id"]:
+                        result["coll_id"] = str(result["coll_id"])
+                    collections.append(result)
+                
+                logger.debug(
+                    "User collections retrieved",
+                    user_id=user_id,
+                    page=page,
+                    limit=limit,
+                    total_count=total_count,
+                    result_count=len(collections)
+                )
+                
+                return collections, total_count
+                
+        except Exception as e:
+            logger.error("DB error in get_user_collections", error=str(e), user_id=user_id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve collections"
+            )
+
+    async def get_collection_by_id(
+        self, 
+        user_id: str, 
+        coll_id: str, 
+        include_clips: bool = False,
+        page: int = 1,
+        limit: int = 20
+    ) -> Optional[Dict[str, Any]]:
+        """Get a specific collection by ID with optional clips."""
+        try:
+            async with self._get_connection(user_id) as conn:
+                # Get collection details
+                collection = await conn.fetchrow("""
+                    SELECT coll_id, name, description, is_smart, rule_json, is_public, 
+                           color_hex, sort_order, created_at, updated_at
+                    FROM collections 
+                    WHERE coll_id = $1 AND owner_uid = $2
+                """, coll_id, user_id)
+                
+                if not collection:
+                    return None
+                
+                result = dict(collection)
+                # Convert UUID to string
+                if "coll_id" in result and result["coll_id"]:
+                    result["coll_id"] = str(result["coll_id"])
+                
+                # Include clips if requested
+                if include_clips:
+                    clips, total_clips = await self._get_collection_clips(
+                        conn, coll_id, user_id, page, limit
+                    )
+                    result["clips"] = clips
+                    result["total_clips"] = total_clips
+                
+                logger.debug(
+                    "Collection retrieved",
+                    user_id=user_id,
+                    coll_id=coll_id,
+                    include_clips=include_clips
+                )
+                
+                return result
+                
+        except Exception as e:
+            logger.error("DB error in get_collection_by_id", error=str(e), user_id=user_id, coll_id=coll_id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve collection"
+            )
+
+    async def _get_collection_clips(
+        self, 
+        conn: asyncpg.Connection, 
+        coll_id: str, 
+        user_id: str,
+        page: int = 1,
+        limit: int = 20
+    ) -> tuple[List[Dict[str, Any]], int]:
+        """Helper method to get clips for a collection."""
+        # Count query
+        count_sql = """
+            SELECT COUNT(*)
+            FROM collections_clips cc
+            JOIN user_clips uc ON cc.clip_id = uc.clip_id
+            WHERE cc.coll_id = $1 AND uc.owner_uid = $2
+        """
+        total_clips = await conn.fetchval(count_sql, coll_id, user_id)
+        
+        # Results query
+        results_sql = """
+            SELECT c.clip_id, c.source_url, c.title, c.description, c.transcript, c.summary, 
+                   c.created_at, uc.saved_at, cc.added_at
+            FROM collections_clips cc
+            JOIN user_clips uc ON cc.clip_id = uc.clip_id
+            JOIN clips c ON cc.clip_id = c.clip_id
+            WHERE cc.coll_id = $1 AND uc.owner_uid = $2
+            ORDER BY cc.added_at DESC
+            LIMIT $3 OFFSET $4
+        """
+        rows = await conn.fetch(results_sql, coll_id, user_id, limit, (page - 1) * limit)
+        
+        # Process results
+        clips = []
+        for row in rows:
+            result = dict(row)
+            # Convert UUID to string
+            if "clip_id" in result and result["clip_id"]:
+                result["clip_id"] = str(result["clip_id"])
+            clips.append(result)
+        
+        return clips, total_clips
+
+    async def update_collection(
+        self, 
+        user_id: str, 
+        coll_id: str, 
+        update_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Update a collection."""
+        try:
+            async with self._get_connection(user_id) as conn:
+                # Check if collection exists and belongs to user
+                existing = await conn.fetchrow("""
+                    SELECT coll_id FROM collections 
+                    WHERE coll_id = $1 AND owner_uid = $2
+                """, coll_id, user_id)
+                
+                if not existing:
+                    return None
+                
+                # Build update query dynamically
+                set_clauses = []
+                params = []
+                param_count = 1
+                
+                for field, value in update_data.items():
+                    if value is not None:
+                        set_clauses.append(f"{field} = ${param_count}")
+                        params.append(value)
+                        param_count += 1
+                
+                if not set_clauses:
+                    # No fields to update
+                    return await self.get_collection_by_id(user_id, coll_id)
+                
+                # Add updated_at timestamp
+                set_clauses.append("updated_at = NOW()")
+                
+                # Check for name uniqueness if name is being updated
+                if "name" in update_data and update_data["name"] is not None:
+                    name_exists = await conn.fetchval("""
+                        SELECT coll_id FROM collections 
+                        WHERE owner_uid = $1 AND name = $2 AND coll_id != $3
+                    """, user_id, update_data["name"], coll_id)
+                    
+                    if name_exists:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail=f"Collection with name '{update_data['name']}' already exists"
+                        )
+                
+                # Execute update
+                update_sql = f"""
+                    UPDATE collections 
+                    SET {', '.join(set_clauses)}
+                    WHERE coll_id = ${param_count} AND owner_uid = ${param_count + 1}
+                """
+                params.extend([coll_id, user_id])
+                
+                await conn.execute(update_sql, *params)
+                
+                # Return updated collection
+                return await self.get_collection_by_id(user_id, coll_id)
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("DB error in update_collection", error=str(e), user_id=user_id, coll_id=coll_id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update collection"
+            )
+
+    async def delete_collection(self, user_id: str, coll_id: str) -> bool:
+        """Delete a collection (removes collection_clips entries but preserves clips)."""
+        try:
+            async with self._get_connection(user_id) as conn:
+                # Check if collection exists and belongs to user
+                existing = await conn.fetchrow("""
+                    SELECT coll_id FROM collections 
+                    WHERE coll_id = $1 AND owner_uid = $2
+                """, coll_id, user_id)
+                
+                if not existing:
+                    return False
+                
+                # Delete collection (this will cascade to collections_clips due to FK constraint)
+                await conn.execute("""
+                    DELETE FROM collections WHERE coll_id = $1 AND owner_uid = $2
+                """, coll_id, user_id)
+                
+                logger.info("Collection deleted", user_id=user_id, coll_id=coll_id)
+                return True
+                
+        except Exception as e:
+            logger.error("DB error in delete_collection", error=str(e), user_id=user_id, coll_id=coll_id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete collection"
+            )
+
+    async def add_clip_to_collection(self, user_id: str, coll_id: str, clip_id: str) -> bool:
+        """Add a clip to a collection."""
+        try:
+            async with self._get_connection(user_id) as conn:
+                # Check if collection exists and belongs to user
+                collection = await conn.fetchrow("""
+                    SELECT coll_id FROM collections 
+                    WHERE coll_id = $1 AND owner_uid = $2
+                """, coll_id, user_id)
+                
+                if not collection:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Collection not found"
+                    )
+                
+                # Check if clip exists and user has access to it
+                clip = await conn.fetchrow("""
+                    SELECT clip_id FROM user_clips 
+                    WHERE clip_id = $1 AND owner_uid = $2
+                """, clip_id, user_id)
+                
+                if not clip:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Clip not found or not accessible"
+                    )
+                
+                # Check if clip is already in collection
+                existing = await conn.fetchrow("""
+                    SELECT coll_id FROM collections_clips 
+                    WHERE coll_id = $1 AND clip_id = $2
+                """, coll_id, clip_id)
+                
+                if existing:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Clip is already in this collection"
+                    )
+                
+                # Add clip to collection
+                await conn.execute("""
+                    INSERT INTO collections_clips (coll_id, clip_id, added_by_uid)
+                    VALUES ($1, $2, $3)
+                """, coll_id, clip_id, user_id)
+                
+                logger.info("Clip added to collection", user_id=user_id, coll_id=coll_id, clip_id=clip_id)
+                return True
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("DB error in add_clip_to_collection", error=str(e), user_id=user_id, coll_id=coll_id, clip_id=clip_id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to add clip to collection"
+            )
+
+    async def remove_clip_from_collection(self, user_id: str, coll_id: str, clip_id: str) -> bool:
+        """Remove a clip from a collection."""
+        try:
+            async with self._get_connection(user_id) as conn:
+                # Check if collection exists and belongs to user
+                collection = await conn.fetchrow("""
+                    SELECT coll_id FROM collections 
+                    WHERE coll_id = $1 AND owner_uid = $2
+                """, coll_id, user_id)
+                
+                if not collection:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Collection not found"
+                    )
+                
+                # Remove clip from collection
+                result = await conn.execute("""
+                    DELETE FROM collections_clips 
+                    WHERE coll_id = $1 AND clip_id = $2
+                """, coll_id, clip_id)
+                
+                if result == "DELETE 0":
+                    # Clip was not in collection
+                    return False
+                
+                logger.info("Clip removed from collection", user_id=user_id, coll_id=coll_id, clip_id=clip_id)
+                return True
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("DB error in remove_clip_from_collection", error=str(e), user_id=user_id, coll_id=coll_id, clip_id=clip_id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to remove clip from collection"
+            )
+
 
 # Global instance (lazy initialization)
 _db_instance: Optional[SupabaseDB] = None
