@@ -8,6 +8,15 @@ on:
     branches: [main-v3]
     paths: ['db/**']
   workflow_dispatch:
+    inputs:
+      reset_database:
+        description: 'Reset database state before deploying (fixes hash mismatches)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 jobs:
   verify-migrations:
@@ -98,6 +107,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          RESET_DATABASE: ${{ github.event.inputs.reset_database || 'false' }}
         run: |
           if [[ -z "$SUPABASE_DB_PASSWORD" ]]; then
             echo "❌ SUPABASE_DB_PASSWORD secret is not set!"
@@ -111,16 +121,21 @@ jobs:
           echo "📋 Project: $PROJECT_REF"
           echo "🌐 Host: aws-0-us-east-2.pooler.supabase.com:6543"
           
-          echo "📊 Current migration status:"
-          sqitch status "$DATABASE_URL" || echo "No previous migrations"
-          
-          echo "🚀 Deploying migrations..."
-          sqitch deploy "$DATABASE_URL"
-          
-          echo "✅ Verifying migrations..."
-          sqitch verify "$DATABASE_URL"
-          
-          echo "✅ Database migrations completed successfully!"
+          if [[ "$RESET_DATABASE" == "true" ]]; then
+            echo "🔄 Reset mode enabled - using reset-and-deploy script..."
+            ./reset-and-deploy.sh
+          else
+            echo "📊 Current migration status:"
+            sqitch status "$DATABASE_URL" || echo "No previous migrations"
+            
+            echo "🚀 Deploying migrations..."
+            sqitch deploy "$DATABASE_URL"
+            
+            echo "✅ Verifying migrations..."
+            sqitch verify "$DATABASE_URL"
+            
+            echo "✅ Database migrations completed successfully!"
+          fi
           
       - name: Migration failure rollback
         if: failure()
