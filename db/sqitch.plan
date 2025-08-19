@@ -4,6 +4,6 @@
 
 01_init_tables 2025-01-22T02:30:00Z ClipVault Team <dev@clipvault.com> # Create core tables for ClipVault schema
 02_profiles_table 2025-01-22T02:30:00Z ClipVault Team <dev@clipvault.com> # Create profiles table for digest preferences
-03_indices 2025-01-22T02:30:00Z ClipVault Team <dev@clipvault.com> # Add performance and FTS indices
-04_rls_policies 2025-01-22T02:30:00Z ClipVault Team <dev@clipvault.com> # Add Row Level Security policies
+02_indices 2025-01-22T02:30:00Z ClipVault Team <dev@clipvault.com> # Add performance and FTS indices
+03_rls_policies 2025-01-22T02:30:00Z ClipVault Team <dev@clipvault.com> # Add Row Level Security policies
 04_ai_processing_fields 2025-08-20T08:30:00Z ClipVault Team <dev@clipvault.com> # Add AI processing fields for Universal Action Agent results 
