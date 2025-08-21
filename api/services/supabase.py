@@ -779,7 +779,12 @@ class SupabaseDB:
         Returns None if not found or not accessible.
         """
         sql = """
-        SELECT c.clip_id, c.source_url, c.transcript, c.summary, c.created_at, c.updated_at,
+        SELECT c.clip_id, c.source_url, c.media_type, c.title, c.description, c.transcript, c.summary, 
+               c.thumbnail_url, c.duration_seconds, c.word_count, c.language_code, c.status, c.metadata,
+               c.created_at, c.updated_at, c.ocr_text, c.ocr_regions_count, c.ai_category, 
+               c.ai_extracted_data, c.ai_confidence, c.universal_actions, c.contact_info, c.locations,
+               c.platforms_found, c.processing_started_at, c.processing_completed_at, 
+               c.processing_duration_seconds, c.ai_model_used, c.processing_cost, c.ai_description,
                uc.saved_at,
                COALESCE(json_agg(json_build_object('tag_id', t.tag_id, 'name', t.name)) FILTER (WHERE t.tag_id IS NOT NULL), '[]') AS tags
         FROM clips c
@@ -787,7 +792,12 @@ class SupabaseDB:
         LEFT JOIN clip_tags ct ON ct.clip_id = c.clip_id
         LEFT JOIN tags t ON t.tag_id = ct.tag_id
         WHERE c.clip_id = $1 AND uc.owner_uid = $2
-        GROUP BY c.clip_id, c.source_url, c.transcript, c.summary, c.created_at, c.updated_at, uc.saved_at
+        GROUP BY c.clip_id, c.source_url, c.media_type, c.title, c.description, c.transcript, c.summary, 
+                 c.thumbnail_url, c.duration_seconds, c.word_count, c.language_code, c.status, c.metadata,
+                 c.created_at, c.updated_at, c.ocr_text, c.ocr_regions_count, c.ai_category, 
+                 c.ai_extracted_data, c.ai_confidence, c.universal_actions, c.contact_info, c.locations,
+                 c.platforms_found, c.processing_started_at, c.processing_completed_at, 
+                 c.processing_duration_seconds, c.ai_model_used, c.processing_cost, c.ai_description, uc.saved_at
         """
         try:
             async with self._get_connection(user_id) as conn:
@@ -851,15 +861,27 @@ class SupabaseDB:
         if conditions:
             base_sql += " AND " + " AND ".join(conditions)
         
-        # Add grouping
-        base_sql += " GROUP BY c.clip_id, c.source_url, c.transcript, c.summary, c.created_at, uc.saved_at"
+        # Add grouping (all clip fields needed for SELECT)
+        group_by_fields = """c.clip_id, c.source_url, c.media_type, c.title, c.description, c.transcript, c.summary, 
+                             c.thumbnail_url, c.duration_seconds, c.word_count, c.language_code, c.status, c.metadata,
+                             c.created_at, c.updated_at, c.ocr_text, c.ocr_regions_count, c.ai_category, 
+                             c.ai_extracted_data, c.ai_confidence, c.universal_actions, c.contact_info, c.locations,
+                             c.platforms_found, c.processing_started_at, c.processing_completed_at, 
+                             c.processing_duration_seconds, c.ai_model_used, c.processing_cost, c.ai_description, uc.saved_at"""
+        
+        base_sql += f" GROUP BY {group_by_fields}"
         
         # Count query
         count_sql = f"SELECT COUNT(DISTINCT c.clip_id) {base_sql}"
         
         # Results query
         results_sql = f"""
-        SELECT c.clip_id, c.source_url, c.title, c.description, c.transcript, c.summary, c.created_at,
+        SELECT c.clip_id, c.source_url, c.media_type, c.title, c.description, c.transcript, c.summary, 
+               c.thumbnail_url, c.duration_seconds, c.word_count, c.language_code, c.status, c.metadata,
+               c.created_at, c.updated_at, c.ocr_text, c.ocr_regions_count, c.ai_category, 
+               c.ai_extracted_data, c.ai_confidence, c.universal_actions, c.contact_info, c.locations,
+               c.platforms_found, c.processing_started_at, c.processing_completed_at, 
+               c.processing_duration_seconds, c.ai_model_used, c.processing_cost, c.ai_description,
                uc.saved_at,
                COALESCE(json_agg(json_build_object('tag_id', t.tag_id, 'name', t.name)) FILTER (WHERE t.tag_id IS NOT NULL), '[]') AS tags
         {base_sql}

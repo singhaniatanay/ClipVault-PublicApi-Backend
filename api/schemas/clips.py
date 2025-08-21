@@ -228,11 +228,35 @@ class TagModel(BaseModel):
 class ClipModel(BaseModel):
     clip_id: str
     source_url: HttpUrl
+    media_type: str = "link"
+    title: Optional[str] = None
+    description: Optional[str] = None
     transcript: Optional[str] = None
     summary: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    word_count: Optional[int] = None
+    language_code: Optional[str] = "en"
+    status: str = "pending"
+    metadata: Optional[dict] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
-    # Add more fields as needed from the clips table
+    # AI Processing fields
+    ocr_text: Optional[str] = None
+    ocr_regions_count: Optional[int] = None
+    ai_category: Optional[str] = None
+    ai_extracted_data: Optional[dict] = None
+    ai_confidence: Optional[float] = None
+    universal_actions: Optional[list] = None
+    contact_info: Optional[dict] = None
+    locations: Optional[list] = None
+    platforms_found: Optional[dict] = None
+    processing_started_at: Optional[datetime] = None
+    processing_completed_at: Optional[datetime] = None
+    processing_duration_seconds: Optional[float] = None
+    ai_model_used: Optional[str] = None
+    processing_cost: Optional[float] = None
+    ai_description: Optional[str] = None
 
 class ClipDetailResponse(BaseModel):
     clip: ClipModel

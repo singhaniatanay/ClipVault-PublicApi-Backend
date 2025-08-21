@@ -120,11 +120,36 @@ async def get_all_clips(
             search_clip = SearchClip(
                 clip_id=clip_data["clip_id"],
                 source_url=clip_data["source_url"],
+                media_type=clip_data.get("media_type", "link"),
                 title=clip_data.get("title"),
                 description=clip_data.get("description"),
                 transcript=clip_data.get("transcript"),
                 summary=clip_data.get("summary"),
+                thumbnail_url=clip_data.get("thumbnail_url"),
+                duration_seconds=clip_data.get("duration_seconds"),
+                word_count=clip_data.get("word_count"),
+                language_code=clip_data.get("language_code", "en"),
+                status=clip_data.get("status", "pending"),
+                metadata=clip_data.get("metadata"),
                 created_at=clip_data["created_at"],
+                updated_at=clip_data.get("updated_at"),
+                # AI Processing fields
+                ocr_text=clip_data.get("ocr_text"),
+                ocr_regions_count=clip_data.get("ocr_regions_count"),
+                ai_category=clip_data.get("ai_category"),
+                ai_extracted_data=clip_data.get("ai_extracted_data"),
+                ai_confidence=clip_data.get("ai_confidence"),
+                universal_actions=clip_data.get("universal_actions"),
+                contact_info=clip_data.get("contact_info"),
+                locations=clip_data.get("locations"),
+                platforms_found=clip_data.get("platforms_found"),
+                processing_started_at=clip_data.get("processing_started_at"),
+                processing_completed_at=clip_data.get("processing_completed_at"),
+                processing_duration_seconds=clip_data.get("processing_duration_seconds"),
+                ai_model_used=clip_data.get("ai_model_used"),
+                processing_cost=clip_data.get("processing_cost"),
+                ai_description=clip_data.get("ai_description"),
+                # User-specific fields
                 saved_at=clip_data["saved_at"],
                 tags=clip_data.get("tags", [])
             )
@@ -201,10 +226,35 @@ async def get_clip_by_id(
     clip = ClipModel(
         clip_id=result["clip_id"],
         source_url=result["source_url"],
+        media_type=result.get("media_type", "link"),
+        title=result.get("title"),
+        description=result.get("description"),
         transcript=result.get("transcript"),
         summary=result.get("summary"),
+        thumbnail_url=result.get("thumbnail_url"),
+        duration_seconds=result.get("duration_seconds"),
+        word_count=result.get("word_count"),
+        language_code=result.get("language_code", "en"),
+        status=result.get("status", "pending"),
+        metadata=result.get("metadata"),
         created_at=result["created_at"],
-        updated_at=result.get("updated_at")
+        updated_at=result.get("updated_at"),
+        # AI Processing fields
+        ocr_text=result.get("ocr_text"),
+        ocr_regions_count=result.get("ocr_regions_count"),
+        ai_category=result.get("ai_category"),
+        ai_extracted_data=result.get("ai_extracted_data"),
+        ai_confidence=result.get("ai_confidence"),
+        universal_actions=result.get("universal_actions"),
+        contact_info=result.get("contact_info"),
+        locations=result.get("locations"),
+        platforms_found=result.get("platforms_found"),
+        processing_started_at=result.get("processing_started_at"),
+        processing_completed_at=result.get("processing_completed_at"),
+        processing_duration_seconds=result.get("processing_duration_seconds"),
+        ai_model_used=result.get("ai_model_used"),
+        processing_cost=result.get("processing_cost"),
+        ai_description=result.get("ai_description")
     )
     tags = [TagModel(**tag) for tag in result.get("tags", [])]
     saved_at = result["saved_at"]
