@@ -118,4 +118,32 @@ async def add_clip_to_collection(db: SupabaseDB, user_id: str, coll_id: str, cli
 
 async def remove_clip_from_collection(db: SupabaseDB, user_id: str, coll_id: str, clip_id: str) -> bool:
     """Thin interface for removing a clip from a collection."""
-    return await db.remove_clip_from_collection(user_id, coll_id, clip_id) 
+    return await db.remove_clip_from_collection(user_id, coll_id, clip_id)
+
+# ============================================================================
+# Digest Profile Interface Functions
+# ============================================================================
+
+async def get_user_digest_profile(db: SupabaseDB, user_id: str) -> Optional[Dict]:
+    """Thin interface for getting user digest profile from public.profiles table."""
+    return await db.get_user_digest_profile(user_id)
+
+async def create_user_digest_profile(db: SupabaseDB, user_id: str, profile_data: Dict) -> bool:
+    """Thin interface for creating user digest profile."""
+    return await db.create_user_digest_profile(user_id, profile_data)
+
+async def update_user_digest_profile(db: SupabaseDB, user_id: str, profile_data: Dict) -> bool:
+    """Thin interface for updating user digest profile."""
+    return await db.update_user_digest_profile(user_id, profile_data)
+
+async def get_digest_preferences(db: SupabaseDB, user_id: str) -> Optional[Dict]:
+    """Thin interface for getting digest preferences."""
+    return await db.get_digest_preferences(user_id)
+
+async def update_digest_preferences(db: SupabaseDB, user_id: str, preferences: Dict) -> bool:
+    """Thin interface for updating digest preferences."""
+    return await db.update_digest_preferences(user_id, preferences)
+
+async def get_digest_preview_clips(db: SupabaseDB, user_id: str, limit: int = 3) -> List[Dict]:
+    """Thin interface for getting clips for digest preview."""
+    return await db.get_latest_clips_for_digest(user_id, limit) 

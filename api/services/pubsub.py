@@ -2,6 +2,7 @@
 
 import os
 import json
+import base64
 import asyncio
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
@@ -76,23 +77,21 @@ class PubSubService:
         source_url: str, 
         user_id: str,
         correlation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """Create a standardized clip.created event message."""
-        return {
-            "event_type": "clip.created",
-            "event_id": str(uuid4()),
-            "correlation_id": correlation_id or str(uuid4()),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "data": {
-                "clip_id": clip_id,
-                "source_url": source_url,
-                "user_id": user_id
-            },
-            "metadata": {
-                "api_version": "v1",
-                "service": "clipvault-api"
-            }
+    ) -> str:
+        """Create a base64 encoded clip.created event message."""
+        # Create the data payload that will be base64 encoded
+        data_payload = {
+            "clip_id": clip_id,
+            "source_url": source_url,
+            "user_id": user_id,
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
+        
+        # Convert to JSON string and then base64 encode
+        json_string = json.dumps(data_payload)
+        base64_data = base64.b64encode(json_string.encode('utf-8')).decode('utf-8')
+        
+        return base64_data
 
     async def publish_clip_created(
         self, 
@@ -117,24 +116,23 @@ class PubSubService:
             logger.error("PubSubService not initialized - cannot publish message")
             return False
             
-        # Create standardized message
-        message_data = self._create_clip_created_message(
+        # Create base64 encoded message data
+        base64_data = self._create_clip_created_message(
             clip_id=clip_id,
             source_url=source_url,
             user_id=user_id,
             correlation_id=correlation_id
         )
         
-        # Convert to JSON bytes
-        message_bytes = json.dumps(message_data).encode('utf-8')
+        # The actual message data is just the base64 string (as bytes)
+        message_bytes = base64_data.encode('utf-8')
         
         logger.info(
             "Publishing clip.created event",
             clip_id=clip_id,
             source_url=source_url,
             user_id=user_id,
-            event_id=message_data["event_id"],
-            correlation_id=message_data["correlation_id"]
+            correlation_id=correlation_id or "auto-generated"
         )
         
         try:
@@ -149,7 +147,7 @@ class PubSubService:
                 event_type="clip.created",
                 clip_id=clip_id,
                 user_id=user_id,
-                correlation_id=message_data["correlation_id"]
+                correlation_id=correlation_id or str(uuid4())
             )
             
             # Get the message ID (this will block until published or failed)
@@ -159,8 +157,7 @@ class PubSubService:
                 "Successfully published clip.created event",
                 clip_id=clip_id,
                 message_id=message_id,
-                event_id=message_data["event_id"],
-                correlation_id=message_data["correlation_id"]
+                correlation_id=correlation_id or "auto-generated"
             )
             
             return True
@@ -176,7 +173,10 @@ class PubSubService:
             )
             
             # Try to send to DLQ
-            dlq_success = await self._send_to_dlq(message_data, str(e))
+            dlq_success = await self._send_to_dlq(
+                {"clip_id": clip_id, "source_url": source_url, "user_id": user_id}, 
+                str(e)
+            )
             if not dlq_success:
                 logger.error(
                     "Failed to send message to DLQ after primary failure",
@@ -196,7 +196,10 @@ class PubSubService:
             )
             
             # Send to DLQ for manual inspection
-            await self._send_to_dlq(message_data, str(e))
+            await self._send_to_dlq(
+                {"clip_id": clip_id, "source_url": source_url, "user_id": user_id}, 
+                str(e)
+            )
             return False
             
         except Exception as e:
@@ -209,7 +212,10 @@ class PubSubService:
             )
             
             # Send to DLQ for manual inspection
-            await self._send_to_dlq(message_data, str(e))
+            await self._send_to_dlq(
+                {"clip_id": clip_id, "source_url": source_url, "user_id": user_id}, 
+                str(e)
+            )
             return False
 
     async def _send_to_dlq(self, original_message: Dict[str, Any], error_reason: str) -> bool:
@@ -241,8 +247,8 @@ class PubSubService:
                 dlq_bytes,
                 # Add DLQ-specific attributes
                 dlq_reason="publish_failure",
-                original_event_type=original_message.get("event_type", "unknown"),
-                original_clip_id=original_message.get("data", {}).get("clip_id", "unknown")
+                original_event_type="clip.created",
+                original_clip_id=original_message.get("clip_id", "unknown")
             )
             
             dlq_message_id = future.result(timeout=10.0)
@@ -250,7 +256,7 @@ class PubSubService:
             logger.info(
                 "Successfully sent message to DLQ",
                 dlq_message_id=dlq_message_id,
-                original_event_id=original_message.get("event_id"),
+                original_clip_id=original_message.get("clip_id"),
                 error_reason=error_reason
             )
             

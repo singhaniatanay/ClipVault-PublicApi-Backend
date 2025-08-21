@@ -281,6 +281,67 @@
             </form>
         </div>
 
+        <div class="step">
+            <h4>Step 8: Digest Preferences (/digest)</h4>
+            
+            <h5>Get Digest Preferences</h5>
+            <form id="getDigestPreferencesForm" onsubmit="getDigestPreferences(event)">
+                <button type="submit" id="getDigestPreferencesBtn" disabled>⚙️ Get Preferences</button>
+            </form>
+
+            <h5>Update Digest Preferences</h5>
+            <form id="updateDigestPreferencesForm" onsubmit="updateDigestPreferences(event)">
+                <label for="digestEnabled">Enable Digest:</label>
+                <select id="digestEnabled" name="digestEnabled" style="width: 100%;">
+                    <option value="true" selected>Yes</option>
+                    <option value="false">No</option>
+                </select>
+                <label for="digestCadence">Digest Cadence:</label>
+                <select id="digestCadence" name="digestCadence" style="width: 100%;">
+                    <option value="daily">Daily</option>
+                    <option value="weekly" selected>Weekly</option>
+                    <option value="monthly">Monthly</option>
+                </select>
+                <label for="digestTime">Digest Time:</label>
+                <input type="time" id="digestTime" name="digestTime" value="09:00" style="width: 100%;">
+                <label for="digestDay">Digest Day (for weekly):</label>
+                <select id="digestDay" name="digestDay" style="width: 100%;">
+                    <option value="1" selected>Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                    <option value="7">Sunday</option>
+                </select>
+                <button type="submit" id="updateDigestPreferencesBtn" disabled>💾 Update Preferences</button>
+            </form>
+
+            <h5>Get Digest Preview</h5>
+            <form id="getDigestPreviewForm" onsubmit="getDigestPreview(event)">
+                <label for="digestTemplateType">Template Type:</label>
+                <select id="digestTemplateType" name="digestTemplateType" style="width: 100%;">
+                    <option value="daily">Daily</option>
+                    <option value="weekly" selected>Weekly</option>
+                    <option value="monthly">Monthly</option>
+                </select>
+                <button type="submit" id="getDigestPreviewBtn" disabled>👁️ Get Preview</button>
+            </form>
+
+            <h5>Subscribe/Unsubscribe</h5>
+            <form id="subscribeDigestForm" onsubmit="subscribeToDigest(event)">
+                <label for="digestSubscribeEnabled">Enable Subscription:</label>
+                <select id="digestSubscribeEnabled" name="digestSubscribeEnabled" style="width: 100%;">
+                    <option value="true" selected>Yes</option>
+                    <option value="false">No</option>
+                </select>
+                <button type="submit" id="subscribeDigestBtn" disabled>📧 Subscribe</button>
+            </form>
+            <form id="unsubscribeDigestForm" onsubmit="unsubscribeFromDigest(event)">
+                <button type="submit" id="unsubscribeDigestBtn" disabled>🚫 Unsubscribe</button>
+            </form>
+        </div>
+
         <div id="results"></div>
     </div>
 
@@ -760,6 +821,18 @@ ${JSON.stringify(result, null, 2)}`, 'error');
             if (removeClipFromCollectionBtn) removeClipFromCollectionBtn.disabled = !currentSession;
             const deleteCollectionBtn = document.getElementById('deleteCollectionBtn');
             if (deleteCollectionBtn) deleteCollectionBtn.disabled = !currentSession;
+            
+            // Digest buttons
+            const getDigestPreferencesBtn = document.getElementById('getDigestPreferencesBtn');
+            if (getDigestPreferencesBtn) getDigestPreferencesBtn.disabled = !currentSession;
+            const updateDigestPreferencesBtn = document.getElementById('updateDigestPreferencesBtn');
+            if (updateDigestPreferencesBtn) updateDigestPreferencesBtn.disabled = !currentSession;
+            const getDigestPreviewBtn = document.getElementById('getDigestPreviewBtn');
+            if (getDigestPreviewBtn) getDigestPreviewBtn.disabled = !currentSession;
+            const subscribeDigestBtn = document.getElementById('subscribeDigestBtn');
+            if (subscribeDigestBtn) subscribeDigestBtn.disabled = !currentSession;
+            const unsubscribeDigestBtn = document.getElementById('unsubscribeDigestBtn');
+            if (unsubscribeDigestBtn) unsubscribeDigestBtn.disabled = !currentSession;
         }
         // Also update on auth state change
         if (window.supabase) {
@@ -1201,6 +1274,188 @@ ${JSON.stringify(result, null, 2)}`, 'error');
                 }
             } catch (error) {
                 showResult(`❌ Error deleting collection: ${error.message}`, 'error');
+            }
+        }
+
+        // Digest functions
+        async function getDigestPreferences(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+
+            try {
+                showResult('🔄 Getting digest preferences...', 'info');
+                const response = await fetch(`${apiBaseUrl}/digest/preferences`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showResult(`✅ Digest preferences retrieved (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'success');
+                } else {
+                    showResult(`❌ Failed to get digest preferences (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error getting digest preferences: ${error.message}`, 'error');
+            }
+        }
+
+        async function updateDigestPreferences(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+
+            const digestEnabled = document.getElementById('digestEnabled').value === 'true';
+            const digestCadence = document.getElementById('digestCadence').value;
+            const digestTime = document.getElementById('digestTime').value + ':00'; // Add seconds
+            const digestDay = parseInt(document.getElementById('digestDay').value);
+
+            try {
+                showResult('🔄 Updating digest preferences...', 'info');
+                const response = await fetch(`${apiBaseUrl}/digest/preferences`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        digest_enabled: digestEnabled,
+                        digest_cadence: digestCadence,
+                        digest_time: digestTime,
+                        digest_day: digestDay
+                    })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showResult(`✅ Digest preferences updated (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'success');
+                } else {
+                    showResult(`❌ Failed to update digest preferences (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error updating digest preferences: ${error.message}`, 'error');
+            }
+        }
+
+        async function getDigestPreview(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+
+            const templateType = document.getElementById('digestTemplateType').value;
+
+            try {
+                showResult('🔄 Generating digest preview...', 'info');
+                const response = await fetch(`${apiBaseUrl}/digest/preview?template_type=${templateType}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    // Show HTML content in a new window/tab
+                    const newWindow = window.open('', '_blank');
+                    newWindow.document.write(result.html_content);
+                    newWindow.document.close();
+                    
+                    showResult(`✅ Digest preview generated (${response.status}):\n\nClip count: ${result.clip_count}\nPreview date: ${result.preview_date}\n\nHTML preview opened in new window.`, 'success');
+                } else {
+                    showResult(`❌ Failed to generate digest preview (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error generating digest preview: ${error.message}`, 'error');
+            }
+        }
+
+        async function subscribeToDigest(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+
+            const enabled = document.getElementById('digestSubscribeEnabled').value === 'true';
+
+            try {
+                showResult('🔄 Updating digest subscription...', 'info');
+                const response = await fetch(`${apiBaseUrl}/digest/subscribe`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ enabled: enabled })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showResult(`✅ Digest subscription updated (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'success');
+                } else {
+                    showResult(`❌ Failed to update digest subscription (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error updating digest subscription: ${error.message}`, 'error');
+            }
+        }
+
+        async function unsubscribeFromDigest(event) {
+            event.preventDefault();
+            if (!currentSession) {
+                showResult('❌ No active session. Please sign in first.', 'error');
+                return;
+            }
+            const apiBaseUrl = getApiBaseUrl();
+            if (!apiBaseUrl) {
+                showResult('❌ Please select or enter API Base URL', 'error');
+                return;
+            }
+
+            try {
+                showResult('🔄 Unsubscribing from digest...', 'info');
+                const response = await fetch(`${apiBaseUrl}/digest/subscribe`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showResult(`✅ Digest unsubscribed (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'success');
+                } else {
+                    showResult(`❌ Failed to unsubscribe from digest (${response.status}):\n\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ Error unsubscribing from digest: ${error.message}`, 'error');
             }
         }
     </script>

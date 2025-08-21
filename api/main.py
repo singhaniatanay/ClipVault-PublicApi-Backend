@@ -18,7 +18,7 @@ load_dotenv()
 from api.services.auth import init_auth_service, shutdown_auth_service
 from api.services.supabase import init_database_service, shutdown_database_service
 from api.services.pubsub import init_pubsub_service, shutdown_pubsub_service
-from api.routes import auth, clips, search, collections
+from api.routes import auth, clips, search, collections, digest
 
 # Configure structured logging for production
 def configure_logging():
@@ -163,11 +163,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Development mode: Override authentication for testing
+if os.getenv("ENVIRONMENT", "development") == "development":
+    from api.services.auth import get_current_user
+    
+    async def mock_get_current_user():
+        """Mock user for development testing."""
+        return {
+            "sub": "12345678-1234-1234-1234-123456789abc",
+            "user_id": "12345678-1234-1234-1234-123456789abc", 
+            "email": "test@clipvault.com",
+            "aud": "authenticated",
+            "role": "authenticated"
+        }
+    
+    # Override the dependency for development
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+    logger.info("Development mode: Using mock authentication")
+
 # Register route modules
 app.include_router(auth.router)
 app.include_router(clips.router)
 app.include_router(search.router)
 app.include_router(collections.router)
+app.include_router(digest.router)
 
 
 @app.middleware("http")

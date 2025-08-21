@@ -2,6 +2,7 @@
 
 import pytest
 import json
+import base64
 import asyncio
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from datetime import datetime, timezone
@@ -56,28 +57,27 @@ class TestPubSubService:
                 await pubsub_service.initialize()
 
     def test_create_clip_created_message(self, pubsub_service):
-        """Test creation of standardized clip.created message."""
+        """Test creation of base64 encoded clip.created message."""
         clip_id = str(uuid4())
         source_url = "https://example.com/article"
         user_id = str(uuid4())
         correlation_id = str(uuid4())
         
-        message = pubsub_service._create_clip_created_message(
+        base64_message = pubsub_service._create_clip_created_message(
             clip_id=clip_id,
             source_url=source_url,
             user_id=user_id,
             correlation_id=correlation_id
         )
         
-        assert message["event_type"] == "clip.created"
-        assert message["correlation_id"] == correlation_id
-        assert message["data"]["clip_id"] == clip_id
-        assert message["data"]["source_url"] == source_url
-        assert message["data"]["user_id"] == user_id
-        assert message["metadata"]["api_version"] == "v1"
-        assert message["metadata"]["service"] == "clipvault-api"
-        assert "event_id" in message
-        assert "timestamp" in message
+        # Decode the base64 message to verify content
+        decoded_bytes = base64.b64decode(base64_message)
+        decoded_message = json.loads(decoded_bytes.decode('utf-8'))
+        
+        assert decoded_message["clip_id"] == clip_id
+        assert decoded_message["source_url"] == source_url
+        assert decoded_message["user_id"] == user_id
+        assert "created_at" in decoded_message
 
     @pytest.mark.asyncio
     async def test_publish_clip_created_success(self, pubsub_service, mock_publisher_client):
@@ -110,12 +110,14 @@ class TestPubSubService:
         
         assert topic_path == "projects/test-project/topics/test-clip-events"
         
-        # Parse the message
-        message_data = json.loads(message_bytes.decode('utf-8'))
-        assert message_data["event_type"] == "clip.created"
-        assert message_data["data"]["clip_id"] == clip_id
-        assert message_data["data"]["source_url"] == source_url
-        assert message_data["data"]["user_id"] == user_id
+        # Parse the base64 encoded message
+        base64_data = message_bytes.decode('utf-8')
+        decoded_bytes = base64.b64decode(base64_data)
+        message_data = json.loads(decoded_bytes.decode('utf-8'))
+        assert message_data["clip_id"] == clip_id
+        assert message_data["source_url"] == source_url
+        assert message_data["user_id"] == user_id
+        assert "created_at" in message_data
         
         # Check message attributes
         assert message_attrs["event_type"] == "clip.created"
@@ -331,57 +333,61 @@ class TestMessageFormat:
             return PubSubService(raise_on_missing_env=False)
 
     def test_message_has_required_fields(self, pubsub_service):
-        """Test that generated messages have all required fields."""
-        message = pubsub_service._create_clip_created_message(
+        """Test that generated base64 messages have all required fields when decoded."""
+        base64_message = pubsub_service._create_clip_created_message(
             clip_id="test-clip-id",
             source_url="https://example.com",
             user_id="test-user-id"
         )
         
-        # Required top-level fields
-        required_fields = ["event_type", "event_id", "correlation_id", "timestamp", "data", "metadata"]
+        # Decode the base64 message
+        decoded_bytes = base64.b64decode(base64_message)
+        message = json.loads(decoded_bytes.decode('utf-8'))
+        
+        # Required fields in the decoded message
+        required_fields = ["clip_id", "source_url", "user_id", "created_at"]
         for field in required_fields:
             assert field in message
-        
-        # Required data fields
-        data_fields = ["clip_id", "source_url", "user_id"]
-        for field in data_fields:
-            assert field in message["data"]
-        
-        # Required metadata fields
-        metadata_fields = ["api_version", "service"]
-        for field in metadata_fields:
-            assert field in message["metadata"]
 
     def test_message_timestamp_format(self, pubsub_service):
-        """Test that message timestamp is in ISO format."""
-        message = pubsub_service._create_clip_created_message(
+        """Test that message created_at timestamp is in ISO format."""
+        base64_message = pubsub_service._create_clip_created_message(
             clip_id="test-clip-id",
             source_url="https://example.com",
             user_id="test-user-id"
         )
         
+        # Decode the base64 message
+        decoded_bytes = base64.b64decode(base64_message)
+        message = json.loads(decoded_bytes.decode('utf-8'))
+        
         # Should be able to parse as ISO datetime
-        timestamp = datetime.fromisoformat(message["timestamp"].replace('Z', '+00:00'))
+        timestamp = datetime.fromisoformat(message["created_at"].replace('Z', '+00:00'))
         assert isinstance(timestamp, datetime)
         assert timestamp.tzinfo is not None
 
     def test_correlation_id_generation(self, pubsub_service):
-        """Test correlation ID generation and preservation."""
-        # Test auto-generation
-        message1 = pubsub_service._create_clip_created_message(
+        """Test that base64 message generation works with or without correlation ID."""
+        # Test without correlation ID
+        base64_message1 = pubsub_service._create_clip_created_message(
             clip_id="test-clip-id",
             source_url="https://example.com",
             user_id="test-user-id"
         )
-        assert message1["correlation_id"] is not None
+        # Should still generate a valid base64 message
+        decoded_bytes1 = base64.b64decode(base64_message1)
+        message1 = json.loads(decoded_bytes1.decode('utf-8'))
+        assert message1["clip_id"] == "test-clip-id"
         
-        # Test custom correlation ID
+        # Test with correlation ID (currently not stored in the data payload, but method should still work)
         custom_correlation_id = "custom-correlation-123"
-        message2 = pubsub_service._create_clip_created_message(
+        base64_message2 = pubsub_service._create_clip_created_message(
             clip_id="test-clip-id",
             source_url="https://example.com",
             user_id="test-user-id",
             correlation_id=custom_correlation_id
         )
-        assert message2["correlation_id"] == custom_correlation_id 
+        # Should still generate a valid base64 message
+        decoded_bytes2 = base64.b64decode(base64_message2)
+        message2 = json.loads(decoded_bytes2.decode('utf-8'))
+        assert message2["clip_id"] == "test-clip-id" 

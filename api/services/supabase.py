@@ -456,6 +456,256 @@ class SupabaseDB:
                 user_id=user_id
             )
             return False
+
+    # Digest profile methods
+    async def get_user_digest_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get user digest profile from public.profiles table.
+        
+        Args:
+            user_id: User UUID to fetch profile for
+            
+        Returns:
+            Dict containing user digest profile data or None if not found
+        """
+        try:
+            logger.debug(
+                "Starting user digest profile fetch",
+                user_id=user_id,
+                table="public.profiles"
+            )
+            
+            async with self._get_connection(user_id) as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT user_id, digest_enabled, digest_cadence, digest_time, 
+                           digest_day, last_digest_sent, created_at, updated_at
+                    FROM public.profiles 
+                    WHERE user_id = $1
+                    """,
+                    user_id
+                )
+                
+                if not row:
+                    logger.debug(
+                        "User digest profile not found",
+                        user_id=user_id
+                    )
+                    return None
+                
+                result = dict(row)
+                
+                # Convert UUID objects to strings for Pydantic compatibility
+                if "user_id" in result and result["user_id"]:
+                    result["user_id"] = str(result["user_id"])
+                
+                logger.info(
+                    "User digest profile fetched successfully",
+                    user_id=user_id,
+                    digest_enabled=result.get("digest_enabled"),
+                    digest_cadence=result.get("digest_cadence")
+                )
+                
+                return result
+                
+        except Exception as e:
+            logger.error(
+                "Failed to fetch user digest profile",
+                error=str(e),
+                user_id=user_id
+            )
+            return None
+
+    async def create_user_digest_profile(self, user_id: str, profile_data: Dict[str, Any]) -> bool:
+        """Create user digest profile in public.profiles table.
+        
+        Args:
+            user_id: User's UUID
+            profile_data: Profile data dictionary
+            
+        Returns:
+            bool: True if creation successful
+        """
+        try:
+            async with self._get_connection(user_id) as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO public.profiles (
+                        user_id, digest_enabled, digest_cadence, digest_time, digest_day
+                    ) VALUES ($1, $2, $3, $4, $5)
+                    """,
+                    user_id,
+                    profile_data.get("digest_enabled", True),
+                    profile_data.get("digest_cadence", "weekly"),
+                    profile_data.get("digest_time", "09:00:00"),
+                    profile_data.get("digest_day", 1)
+                )
+                
+                logger.info(
+                    "User digest profile created successfully",
+                    user_id=user_id
+                )
+                
+                return True
+                
+        except Exception as e:
+            logger.error(
+                "Failed to create user digest profile",
+                error=str(e),
+                user_id=user_id
+            )
+            return False
+
+    async def update_user_digest_profile(self, user_id: str, profile_data: Dict[str, Any]) -> bool:
+        """Update user digest profile in public.profiles table.
+        
+        Args:
+            user_id: User's UUID
+            profile_data: Profile data dictionary to update
+            
+        Returns:
+            bool: True if update successful
+        """
+        try:
+            async with self._get_connection(user_id) as conn:
+                # Build dynamic update query
+                update_fields = []
+                params = [user_id]
+                param_count = 1
+                
+                if "digest_enabled" in profile_data:
+                    update_fields.append(f"digest_enabled = ${param_count + 1}")
+                    params.append(profile_data["digest_enabled"])
+                    param_count += 1
+                
+                if "digest_cadence" in profile_data:
+                    update_fields.append(f"digest_cadence = ${param_count + 1}")
+                    params.append(profile_data["digest_cadence"])
+                    param_count += 1
+                
+                if "digest_time" in profile_data:
+                    update_fields.append(f"digest_time = ${param_count + 1}")
+                    params.append(profile_data["digest_time"])
+                    param_count += 1
+                
+                if "digest_day" in profile_data:
+                    update_fields.append(f"digest_day = ${param_count + 1}")
+                    params.append(profile_data["digest_day"])
+                    param_count += 1
+                
+                if "last_digest_sent" in profile_data:
+                    update_fields.append(f"last_digest_sent = ${param_count + 1}")
+                    params.append(profile_data["last_digest_sent"])
+                    param_count += 1
+                
+                if not update_fields:
+                    logger.warning("No fields to update in digest profile", user_id=user_id)
+                    return True
+                
+                query = f"""
+                    UPDATE public.profiles 
+                    SET {', '.join(update_fields)}
+                    WHERE user_id = $1
+                """
+                
+                await conn.execute(query, *params)
+                
+                logger.info(
+                    "User digest profile updated successfully",
+                    user_id=user_id,
+                    updated_fields=list(profile_data.keys())
+                )
+                
+                return True
+                
+        except Exception as e:
+            logger.error(
+                "Failed to update user digest profile",
+                error=str(e),
+                user_id=user_id
+            )
+            return False
+
+    async def get_digest_preferences(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get digest preferences from user profile.
+        
+        Args:
+            user_id: User's UUID
+            
+        Returns:
+            Dict containing digest preferences or None if not found
+        """
+        profile = await self.get_user_digest_profile(user_id)
+        if not profile:
+            return None
+        
+        return {
+            "digest_enabled": profile.get("digest_enabled", True),
+            "digest_cadence": profile.get("digest_cadence", "weekly"),
+            "digest_time": profile.get("digest_time"),
+            "digest_day": profile.get("digest_day", 1)
+        }
+
+    async def update_digest_preferences(self, user_id: str, preferences: Dict[str, Any]) -> bool:
+        """Update digest preferences in user profile.
+        
+        Args:
+            user_id: User's UUID
+            preferences: Preferences dictionary to update
+            
+        Returns:
+            bool: True if update successful
+        """
+        return await self.update_user_digest_profile(user_id, preferences)
+
+    async def get_latest_clips_for_digest(self, user_id: str, limit: int = 3) -> List[Dict[str, Any]]:
+        """Get latest clips for digest preview.
+        
+        Args:
+            user_id: User's UUID
+            limit: Maximum number of clips to return
+            
+        Returns:
+            List of clip dictionaries
+        """
+        try:
+            async with self._get_connection(user_id) as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT c.clip_id, c.source_url, c.title, c.description, 
+                           c.thumbnail_url, uc.saved_at
+                    FROM clips c
+                    JOIN user_clips uc ON c.clip_id = uc.clip_id
+                    WHERE uc.owner_uid = $1
+                    ORDER BY uc.saved_at DESC
+                    LIMIT $2
+                    """,
+                    user_id,
+                    limit
+                )
+                
+                result = []
+                for row in rows:
+                    clip_data = dict(row)
+                    # Convert UUID objects to strings
+                    if "clip_id" in clip_data and clip_data["clip_id"]:
+                        clip_data["clip_id"] = str(clip_data["clip_id"])
+                    result.append(clip_data)
+                
+                logger.debug(
+                    "Latest clips for digest fetched",
+                    user_id=user_id,
+                    clip_count=len(result)
+                )
+                
+                return result
+                
+        except Exception as e:
+            logger.error(
+                "Failed to fetch latest clips for digest",
+                error=str(e),
+                user_id=user_id
+            )
+            return []
     
     async def health_check(self) -> Dict[str, Any]:
         """Check database health and connection pool status."""
