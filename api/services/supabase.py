@@ -808,9 +808,25 @@ class SupabaseDB:
                 # Convert UUID to string for clip_id
                 if "clip_id" in result and result["clip_id"]:
                     result["clip_id"] = str(result["clip_id"])
-                # Parse tags JSON
-                if isinstance(result.get('tags'), str):
-                    result['tags'] = json.loads(result['tags'])
+                
+                # Parse JSON fields that come back as strings from PostgreSQL
+                json_fields = ['metadata', 'ai_extracted_data', 'universal_actions', 
+                              'contact_info', 'locations', 'platforms_found', 'tags']
+                
+                for field in json_fields:
+                    if result.get(field) and isinstance(result[field], str):
+                        try:
+                            result[field] = json.loads(result[field])
+                        except json.JSONDecodeError:
+                            logger.warning(f"Failed to parse {field} as JSON", clip_id=result.get("clip_id"))
+                            # Set appropriate default based on expected type
+                            if field in ['universal_actions', 'locations']:
+                                result[field] = []  # list fields
+                            elif field == 'tags':
+                                result[field] = []  # special case for tags
+                            else:
+                                result[field] = {}  # dict fields
+                
                 return result
         except Exception as e:
             logger.error("DB error in get_clip_with_tags_for_user", error=str(e), user_id=user_id, clip_id=clip_id)
@@ -907,9 +923,25 @@ class SupabaseDB:
                     # Convert UUID to string for clip_id
                     if "clip_id" in result and result["clip_id"]:
                         result["clip_id"] = str(result["clip_id"])
-                    # Parse tags JSON
-                    if isinstance(result.get('tags'), str):
-                        result['tags'] = json.loads(result['tags'])
+                    
+                    # Parse JSON fields that come back as strings from PostgreSQL
+                    json_fields = ['metadata', 'ai_extracted_data', 'universal_actions', 
+                                  'contact_info', 'locations', 'platforms_found', 'tags']
+                    
+                    for field in json_fields:
+                        if result.get(field) and isinstance(result[field], str):
+                            try:
+                                result[field] = json.loads(result[field])
+                            except json.JSONDecodeError:
+                                logger.warning(f"Failed to parse {field} as JSON", clip_id=result.get("clip_id"))
+                                # Set appropriate default based on expected type
+                                if field in ['universal_actions', 'locations']:
+                                    result[field] = []  # list fields
+                                elif field == 'tags':
+                                    result[field] = []  # special case for tags
+                                else:
+                                    result[field] = {}  # dict fields
+                    
                     clips.append(result)
                 
                 logger.debug(
